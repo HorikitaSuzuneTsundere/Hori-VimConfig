@@ -37,3 +37,19 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     vim.opt_local.fileformat = "unix"
   end,
 })
+
+-- Auto delete shadas
+vim.api.nvim_create_autocmd("VimEnter", {
+  pattern = "*",
+  callback = function()
+    local shada_dir = vim.fn.expand("~/.local/share/nvim/shada")
+
+    -- Check if the directory exists
+    if vim.fn.isdirectory(shada_dir) == 1 then
+      -- Delete all files in the shada directory
+      for _, file in ipairs(vim.fn.glob(shada_dir .. "/*", true, true)) do
+        vim.fn.delete(file)
+      end
+    end
+  end,
+})
