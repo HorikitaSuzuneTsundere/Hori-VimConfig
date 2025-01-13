@@ -1,3 +1,13 @@
-indent_type = "Spaces"
+# Global settings
+indent_type = "Spaces"        # Use spaces for indentation
+indent_width = 2              # Default indent width
+column_width = 80             # Maximum column width for better readability
+quote_style = "AutoPreferDouble" # Prefer double quotes unless mixed styles exist
+line_endings = "Unix"         # Use Unix-style line endings
+no_collapse_simple_statement = false # Allow collapsing simple statements onto one line
+
+# Lua-specific settings
+[language.lua]
 indent_width = 2
-column_width = 120
+quote_style = "ForceSingle" # Force single quotes in Lua for style consistency
+max_line_length = 80

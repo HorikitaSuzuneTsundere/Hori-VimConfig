@@ -15,3 +15,6 @@ vim.g.autoformat = false -- Disable autoformat
 
 -- Disable diagnostics by default
 vim.diagnostic.enable(false)
+
+-- Optimize shada config
+vim.o.shada = "'50,<10,s10,h,r/tmp"
