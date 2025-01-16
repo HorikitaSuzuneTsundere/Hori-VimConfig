@@ -20,33 +20,44 @@ require("lazy").setup({
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
     -- import/override with your plugins
     { import = "plugins" },
+    -- Lazy-load nvim-treesitter with the event 'BufReadPre'
+    { "nvim-treesitter/nvim-treesitter", lazy = true, event = "BufReadPre" },
+    -- Lazy-load tokyonight colorscheme with the event 'BufReadPre'
+    { "folke/tokyonight.nvim", lazy = true, event = "BufReadPre" },
   },
   defaults = {
     -- By default, only LazyVim plugins will be lazy-loaded. Your custom plugins will load during startup.
     -- If you know what you're doing, you can set this to `true` to have all your custom plugins lazy-loaded by default.
-    lazy = false,
+    lazy = true,  -- Lazy load all plugins by default
     -- It's recommended to leave version=false for now, since a lot the plugin that support versioning,
     -- have outdated releases, which may break your Neovim install.
     version = false, -- always use the latest git commit
     -- version = "*", -- try installing the latest stable version for plugins that support semver
   },
-  install = { colorscheme = { "tokyonight", "habamax" } },
+  install = { colorscheme = { "tokyonight" } },
   checker = {
     enabled = true, -- check for plugin updates periodically
     notify = false, -- notify on update
   }, -- automatically check for plugin updates
   performance = {
+    cache = {
+      enabled = true,
+      path = vim.fn.stdpath("cache") .. "/lazy/cache",
+      -- clear_cache_on_update = true, -- Uncomment to clear cache on plugin updates
+    },
     rtp = {
       -- disable some rtp plugins
       disabled_plugins = {
         "gzip",
-        -- "matchit",
-        -- "matchparen",
-        -- "netrwPlugin",
+        "matchit",
+        "matchparen",
+        "netrwPlugin",
         "tarPlugin",
         "tohtml",
         "tutor",
         "zipPlugin",
+        "man",  -- Disable man if not using `:Man`
+        "shada", -- Disable if no session persistence needed
       },
     },
   },
