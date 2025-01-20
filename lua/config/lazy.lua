@@ -23,10 +23,6 @@ require("lazy").setup({
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
     -- import/override with your plugins
     { import = "plugins" },
-    -- Lazy-load nvim-treesitter with the event 'BufReadPre'
-    { "nvim-treesitter/nvim-treesitter", lazy = true, event = "BufReadPre" },
-    -- Lazy-load tokyonight colorscheme with the event 'BufReadPre'
-    { "folke/tokyonight.nvim", lazy = true, event = "BufReadPre" },
   },
   defaults = {
     -- By default, only LazyVim plugins will be lazy-loaded. Your custom plugins will load during startup.
@@ -36,6 +32,13 @@ require("lazy").setup({
     -- have outdated releases, which may break your Neovim install.
     version = false, -- always use the latest git commit
     -- version = "*", -- try installing the latest stable version for plugins that support semver
+  },
+  plugins = {
+    { "nvim-treesitter/nvim-treesitter", event = "VeryLazy" },
+    { "folke/tokyonight.nvim", event = "VeryLazy" },
+    { "MunifTanjim/nui.nvim", event = "VeryLazy" },
+    { "folke/snacks.nvim", event = "VeryLazy" },
+    { "folke/trouble.nvim", event = "VeryLazy" },
   },
   install = { colorscheme = { "tokyonight" } },
   checker = {
