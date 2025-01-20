@@ -14,6 +14,9 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
+-- Calculate concurrency based on the OS
+local concurrency = jit.os:find("Windows") and (vim.uv.available_parallelism() * 2) or nil
+
 require("lazy").setup({
   spec = {
     -- add LazyVim and import its plugins
@@ -60,5 +63,6 @@ require("lazy").setup({
         "shada", -- Disable if no session persistence needed
       },
     },
+    concurrency = concurrency,  -- Add concurrency here
   },
 })
