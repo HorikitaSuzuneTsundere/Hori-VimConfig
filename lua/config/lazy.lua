@@ -34,11 +34,17 @@ require("lazy").setup({
     -- version = "*", -- try installing the latest stable version for plugins that support semver
   },
   plugins = {
-    { "nvim-treesitter/nvim-treesitter", event = "VeryLazy" },
+    { "nvim-treesitter/nvim-treesitter", event = "LazyFile" },
+    { "nvim-treesitter/nvim-treesitter-textobjects", event = "LazyFile" },
     { "folke/tokyonight.nvim", event = "VeryLazy" },
     { "MunifTanjim/nui.nvim", event = "VeryLazy" },
     { "folke/snacks.nvim", event = "VeryLazy" },
-    { "folke/trouble.nvim", event = "VeryLazy" },
+    { "folke/trouble.nvim", event = "LazyFile" },
+    { "folke/flash.nvim", event = "LazyFile" },
+    { "folke/ts-comments.nvim", event = "LazyFile" },
+    { "akinsho/bufferline.nvim", event = "LazyFile" },
+    { "echasnovski/mini.ai", event = "LazyFile" },
+    { "echasnovski/mini.pairs", event = "LazyFile" },
   },
   install = { colorscheme = { "tokyonight" } },
   checker = {
