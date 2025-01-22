@@ -45,6 +45,7 @@ require("lazy").setup({
     { "akinsho/bufferline.nvim", event = "LazyFile" },
     { "echasnovski/mini.ai", event = "LazyFile" },
     { "echasnovski/mini.pairs", event = "LazyFile" },
+    { "catppuccin/nvim", enabled = false },
   },
   install = { colorscheme = { "tokyonight" } },
   checker = {
@@ -68,6 +69,7 @@ require("lazy").setup({
         "tohtml",
         "tutor",
         "zipPlugin",
+        "spellfile",
         "man",  -- Disable man if not using `:Man`
         "shada", -- Disable if no session persistence needed
       },
