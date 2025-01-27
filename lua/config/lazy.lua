@@ -14,8 +14,10 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
--- Calculate concurrency based on the OS
-local concurrency = jit.os:find("Windows") and (vim.uv.available_parallelism() * 2) or nil
+local concurrency = vim.uv.available_parallelism() -- Default to available parallelism
+if jit.os == "Windows" then
+  concurrency = math.min(concurrency * 2, 16) -- Cap concurrency on Windows
+end
 
 require("lazy").setup({
   spec = {
@@ -56,22 +58,22 @@ require("lazy").setup({
     cache = {
       enabled = true,
       path = vim.fn.stdpath("cache") .. "/lazy/cache",
-      -- clear_cache_on_update = true, -- Uncomment to clear cache on plugin updates
+      clear_cache_on_update = true,
     },
     rtp = {
       -- disable some rtp plugins
       disabled_plugins = {
-        "gzip",
+        -- Heavy plugins you likely don't need
+        "gzip",               -- For compressed files
         "matchit",
         "matchparen",
         "netrwPlugin",
-        "tarPlugin",
+        "tarPlugin",          -- For tar file support
         "tohtml",
         "tutor",
-        "zipPlugin",
-        "spellfile",
-        "man",  -- Disable man if not using `:Man`
-        "shada", -- Disable if no session persistence needed
+        "zipPlugin",          -- For zip file support
+        "man",                -- For reading man pages inside Vim
+        "shada",              -- Session persistence
       },
     },
     concurrency = concurrency,  -- Add concurrency here
