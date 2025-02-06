@@ -71,5 +71,32 @@ return {
         opts.ensure_installed = filtered
       end
     end,
+    event = "LazyFile"
+  },
+  {
+    "folke/noice.nvim",
+    opts = {
+      lsp = {
+        progress = { enabled = false },  -- Disable LSP progress UI (removes frequent updates)
+        signature = { enabled = false }, -- Disable signature help popups (avoids UI lag)
+        message = { enabled = false },   -- Disable LSP messages
+        override = {
+          ["vim.lsp.util.convert_input_to_markdown_lines"] = false,
+          ["vim.lsp.util.stylize_markdown"] = false,
+          ["cmp.entry.get_documentation"] = false,
+        },
+      },
+      messages = { enabled = false },             -- Disable Noice's custom message UI for speed
+      notify = { enabled = true, view = "mini" }, -- Keep lightweight notifications
+      throttle = 50,                              -- Reduce CPU usage by limiting UI updates
+    },
+    event = "VeryLazy",
+  },
+  {
+    "nvim-treesitter/nvim-treesitter",
+    opts = {
+      indent = { enable = false }, -- Disable indentation for performance
+    },
+    event = "VeryLazy"           -- Lazy load Treesitter for improved startup speed
   },
 }
