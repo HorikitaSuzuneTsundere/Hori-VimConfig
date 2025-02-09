@@ -3,53 +3,12 @@
 -- Add any additional autocmds here
 
 -- Automatically remove trailing whitespace and extra blank lines
-vim.api.nvim_create_autocmd("BufWritePre", {
-  pattern = "*",
-  command = [[%s/\s\+$//e | %s/\n\+\%$//e]],
-})
-
--- Toggle relative line numbers in normal mode and disable them in insert mode
-vim.api.nvim_create_autocmd({ "InsertEnter", "InsertLeave" }, {
-  pattern = "*",
-  callback = function()
-    if vim.fn.mode() == "i" then
-      vim.opt.relativenumber = false
-    else
-      vim.opt.relativenumber = true
-    end
-  end,
-})
-
--- Disable auto-commenting on a new line
-vim.api.nvim_create_autocmd("BufEnter", {
-  pattern = "*",
-  callback = function()
-    vim.opt.formatoptions:remove("c")
-    vim.opt.formatoptions:remove("r")
-    vim.opt.formatoptions:remove("o")
-  end,
-})
-
 -- Enforce Unix file format on save
 vim.api.nvim_create_autocmd("BufWritePre", {
   pattern = "*",
   callback = function()
+    -- Combine both BufWritePre operations
+    vim.cmd([[%s/\s\+$//e | %s/\n\+\%$//e]])
     vim.opt_local.fileformat = "unix"
-  end,
-})
-
--- Auto delete shadas
-vim.api.nvim_create_autocmd("VimEnter", {
-  pattern = "*",
-  callback = function()
-    local shada_dir = vim.fn.expand("~/.local/share/nvim/shada")
-
-    -- Check if the directory exists
-    if vim.fn.isdirectory(shada_dir) == 1 then
-      -- Delete all files in the shada directory
-      for _, file in ipairs(vim.fn.glob(shada_dir .. "/*", true, true)) do
-        vim.fn.delete(file)
-      end
-    end
   end,
 })
