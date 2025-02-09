@@ -9,20 +9,20 @@ vim.o.mouse = ""
 vim.opt.backup = false
 vim.opt.writebackup = false
 vim.opt.swapfile = false
+vim.opt.shadafile = "NONE" -- Disable shada file completely
 
 -- in lua/config/options.lua
 vim.g.autoformat = false -- Disable autoformat
 
 -- Disable diagnostics by default
-vim.diagnostic.enable(false)
-
--- Optimize shada config
-vim.o.shada = "'50,<10,s10,h,r/tmp"
+vim.diagnostic.disable()
 
 -- Optimize startup time by disabling some built-in plugins
 vim.g.loaded_matchit = 1
 vim.g.loaded_matchparen = 1
 vim.g.loaded_netrwPlugin = 1
+vim.g.loaded_2html_plugin = 1      -- Disables HTML conversion plugin
+vim.g.loaded_tutor_mode_plugin = 1 -- Disables built-in tutorial
 vim.g.loaded_netrw = 1
 vim.g.loaded_netrwSettings = 1
 vim.g.loaded_netrwFileHandlers = 1
@@ -30,9 +30,24 @@ vim.g.loaded_netrwFileHandlers = 1
 -- Old terminal cursor
 vim.opt.guicursor = "n-v-c-sm:block,i-ci-ve:hor1,r-cr-o:hor1"
 
-vim.opt.cursorline = false  -- VALID: Disables highlighting the cursor line
-vim.opt.hlsearch = false    -- VALID: Disables highlighting of search matches
-vim.opt.foldenable = false  -- VALID: Disables code folding
-vim.opt.spell = false       -- VALID: Disables spell checking
-vim.opt.list = false        -- VALID: Disables displaying special characters (like tabs, trailing spaces)
-vim.opt.syntax = "off"      -- VALID: Disables syntax highlighting
+vim.opt.cursorline = false     -- VALID: Disables highlighting the cursor line
+vim.opt.cursorcolumn = false   -- Disables vertical line at cursor position
+vim.opt.relativenumber = false -- Disables relative line numbering
+vim.opt.number = false         -- Disables line numbers completely
+vim.opt.wrap = false           -- Disables line wrapping
+vim.opt.showcmd = false        -- Disables showing partial commands in bottom right
+vim.opt.ruler = false          -- Disables line/column number in status line
+vim.opt.hlsearch = false       -- VALID: Disables highlighting of search matches
+vim.opt.foldenable = false     -- VALID: Disables code folding
+vim.opt.spell = false          -- VALID: Disables spell checking
+vim.opt.list = false           -- VALID: Disables displaying special characters (like tabs, trailing spaces)
+vim.opt.syntax = "off"         -- VALID: Disables syntax highlighting
+
+-- Configuration for faster file editing
+vim.opt.history = 50              -- Reduces number of commands to remember
+vim.opt.synmaxcol = 128           -- Only highlight first 128 columns for syntax
+vim.opt.redrawtime = 1500         -- Maximum time spent on syntax highlighting
+
+vim.opt.fillchars = { eob = " " } -- Removes ~ from empty lines
+
+vim.lsp.set_log_level("OFF")      -- Disables LSP logging completely
