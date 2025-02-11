@@ -37,24 +37,23 @@ require("lazy").setup({
     -- version = "*", -- try installing the latest stable version for plugins that support semver
   },
   plugins = {
-    -- Load only when a file is opened
+    -- Specific events per plugin
     { "nvim-treesitter/nvim-treesitter",             event = { "BufReadPre", "BufNewFile" } },
     { "folke/trouble.nvim",                          event = "BufWinEnter" },
     { "folke/flash.nvim",                            event = "BufWinEnter" },
     { "folke/ts-comments.nvim",                      event = "BufReadPost" },
     { "echasnovski/mini.ai",                         event = "VeryLazy" },
     { "echasnovski/mini.pairs",                      event = "InsertCharPre" },
-    -- Load after all plugins are loaded
-    { "nvim-treesitter/nvim-treesitter-textobjects", event = { "BufReadPre", "BufNewFile" } },
+    { "nvim-treesitter/nvim-treesitter-textobjects", event = "BufReadPost" },
     { "akinsho/bufferline.nvim",                     event = "UIEnter" },
     { "folke/tokyonight.nvim",                       event = "VimEnter" },
     { "MunifTanjim/nui.nvim",                        event = "VeryLazy" },
     { "folke/snacks.nvim",                           event = "VeryLazy" },
-    -- Load only in insert mode
     { "Exafunction/codeium.nvim",                    event = "InsertEnter" },
     { "nvim-lua/plenary.nvim",                       event = "LazyFile" },
     { "hrsh7th/nvim-cmp",                            event = "InsertEnter" },
     { "rafamadriz/friendly-snippets",                event = "InsertEnter" },
+    { "gbprod/yanky.nvim",                event = "TextYankPost" },
     -- Disabled plugins
     { "catppuccin/nvim",                             enabled = false },
   },
