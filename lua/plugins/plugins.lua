@@ -6,7 +6,7 @@ return {
         enabled = false,
       },
     },
-    event = "LazyFile"
+    event = { "BufReadPost", "BufNewFile" },
   },
   {
     "folke/snacks.nvim",
@@ -54,6 +54,7 @@ return {
   },
   {
     "williamboman/mason.nvim",
+    log_level = vim.log.levels.OFF,  -- Disable mason.nvim logs
     opts = function(_, opts)
       local exclude_pkgs = {
         ["lua-language-server"] = true,
@@ -72,7 +73,7 @@ return {
         opts.ensure_installed = filtered
       end
     end,
-    event = "LazyFile"
+    event = "VeryLazy",
   },
   {
     "folke/noice.nvim",
@@ -99,6 +100,11 @@ return {
     opts = {
       indent = { enable = false }, -- Disable indentation for performance
     },
-    event = "VeryLazy"             -- Lazy load Treesitter for improved startup speed
+    event = { "BufReadPre", "BufNewFile" },             -- Lazy load Treesitter for improved startup speed
+  },
+  {
+    "stevearc/conform.nvim",
+    log_level = vim.log.levels.OFF,  -- Disable conform.nvim logs
+    event = { "BufWritePre" },
   },
 }
