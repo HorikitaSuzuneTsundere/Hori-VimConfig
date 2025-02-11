@@ -54,6 +54,7 @@ return {
   },
   {
     "williamboman/mason.nvim",
+    cmd = "Mason",
     log_level = vim.log.levels.OFF,  -- Disable mason.nvim logs
     opts = function(_, opts)
       local exclude_pkgs = {
@@ -73,7 +74,6 @@ return {
         opts.ensure_installed = filtered
       end
     end,
-    event = "VeryLazy",
   },
   {
     "folke/noice.nvim",
