@@ -15,7 +15,7 @@ vim.opt.shadafile = "NONE" -- Disable shada file completely
 vim.g.autoformat = false -- Disable autoformat
 
 -- Disable diagnostics by default
-vim.diagnostic.disable()
+vim.diagnostic.enable(false)
 
 -- Optimize startup time by disabling some built-in plugins
 vim.g.loaded_matchit = 1
@@ -50,4 +50,7 @@ vim.opt.redrawtime = 1500         -- Maximum time spent on syntax highlighting
 
 vim.opt.fillchars = { eob = " " } -- Removes ~ from empty lines
 
+-- Turn off loggers
 vim.lsp.set_log_level("OFF")      -- Disables LSP logging completely
+vim.fn.setenv("NVIM_LOG_FILE", "NUL")  -- Redirect general logs
+vim.fn.setenv("NEOTREE_LOG_FILE", "NUL")  -- Disable neo-tree.nvim logs
