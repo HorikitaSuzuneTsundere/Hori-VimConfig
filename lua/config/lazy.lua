@@ -20,6 +20,7 @@ if jit.os == "Windows" then
 end
 
 require("lazy").setup({
+  debug = false, -- Disable Lazy.nvim debug logs
   spec = {
     -- add LazyVim and import its plugins
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
@@ -37,21 +38,21 @@ require("lazy").setup({
   },
   plugins = {
     -- Load only when a file is opened
-    { "nvim-treesitter/nvim-treesitter",             event = { "BufReadPost", "BufNewFile" } },
-    { "folke/trouble.nvim",                          event = "LazyFile" },
-    { "folke/flash.nvim",                            event = "LazyFile" },
-    { "folke/ts-comments.nvim",                      event = "LazyFile" },
-    { "echasnovski/mini.ai",                         event = "LazyFile" },
-    { "echasnovski/mini.pairs",                      event = "LazyFile" },
+    { "nvim-treesitter/nvim-treesitter",             event = { "BufReadPre", "BufNewFile" } },
+    { "folke/trouble.nvim",                          event = "BufWinEnter" },
+    { "folke/flash.nvim",                            event = "BufWinEnter" },
+    { "folke/ts-comments.nvim",                      event = "BufReadPost" },
+    { "echasnovski/mini.ai",                         event = "VeryLazy" },
+    { "echasnovski/mini.pairs",                      event = "InsertCharPre" },
     -- Load after all plugins are loaded
-    { "nvim-treesitter/nvim-treesitter-textobjects", event = "VeryLazy" },
-    { "akinsho/bufferline.nvim",                     event = "VeryLazy" },
-    { "folke/tokyonight.nvim",                       event = "VeryLazy" },
+    { "nvim-treesitter/nvim-treesitter-textobjects", event = { "BufReadPre", "BufNewFile" } },
+    { "akinsho/bufferline.nvim",                     event = "UIEnter" },
+    { "folke/tokyonight.nvim",                       event = "VimEnter" },
     { "MunifTanjim/nui.nvim",                        event = "VeryLazy" },
     { "folke/snacks.nvim",                           event = "VeryLazy" },
     -- Load only in insert mode
     { "Exafunction/codeium.nvim",                    event = "InsertEnter" },
-    { "nvim-lua/plenary.nvim",                       event = "InsertEnter" },
+    { "nvim-lua/plenary.nvim",                       event = "LazyFile" },
     { "hrsh7th/nvim-cmp",                            event = "InsertEnter" },
     { "rafamadriz/friendly-snippets",                event = "InsertEnter" },
     -- Disabled plugins
