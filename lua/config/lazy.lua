@@ -14,10 +14,7 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
-local concurrency = vim.uv.available_parallelism() -- Default to available parallelism
-if jit.os == "Windows" then
-  concurrency = math.min(concurrency * 2, 16)      -- Cap concurrency on Windows
-end
+local concurrency = math.min(vim.uv.available_parallelism() * 2, 16)
 
 require("lazy").setup({
   debug = false, -- Disable Lazy.nvim debug logs
@@ -38,22 +35,19 @@ require("lazy").setup({
   },
   plugins = {
     -- Specific events per plugin
-    { "nvim-treesitter/nvim-treesitter",             event = { "BufReadPre", "BufNewFile" } },
-    { "folke/trouble.nvim",                          event = "BufWinEnter" },
-    { "folke/flash.nvim",                            event = "BufWinEnter" },
-    { "folke/ts-comments.nvim",                      event = "BufReadPost" },
-    { "echasnovski/mini.ai",                         event = "VeryLazy" },
-    { "echasnovski/mini.pairs",                      event = "InsertCharPre" },
-    { "nvim-treesitter/nvim-treesitter-textobjects", event = "BufReadPost" },
-    { "akinsho/bufferline.nvim",                     event = "UIEnter" },
+    { "nvim-treesitter/nvim-treesitter",             event = "BufReadPre" },
+    { "folke/trouble.nvim",                          cmd = "TroubleToggle" },
+    { "folke/flash.nvim",                            keys = { "s", "S", "f", "F", "t", "T" } },
+    { "folke/ts-comments.nvim",                      keys = { "gc", "gb" } },
+    { "echasnovski/mini.ai",                         event = "ModeChanged" },
+    { "echasnovski/mini.pairs",                      event = "InsertEnter" },
+    { "nvim-treesitter/nvim-treesitter-textobjects", after = "nvim-treesitter" },
+    { "akinsho/bufferline.nvim",                     event = "BufAdd" },
     { "folke/tokyonight.nvim",                       event = "VimEnter" },
-    { "MunifTanjim/nui.nvim",                        event = "VeryLazy" },
     { "folke/snacks.nvim",                           event = "VeryLazy" },
     { "Exafunction/codeium.nvim",                    event = "InsertEnter" },
-    { "nvim-lua/plenary.nvim",                       event = "LazyFile" },
     { "hrsh7th/nvim-cmp",                            event = "InsertEnter" },
-    { "rafamadriz/friendly-snippets",                event = "InsertEnter" },
-    { "gbprod/yanky.nvim",                event = "TextYankPost" },
+    { "rafamadriz/friendly-snippets",                after = "nvim-cmp" },
     -- Disabled plugins
     { "catppuccin/nvim",                             enabled = false },
   },
@@ -61,12 +55,13 @@ require("lazy").setup({
   checker = {
     enabled = true, -- check for plugin updates periodically
     notify = false, -- notify on update
+    frequency = 3600, -- Check for updates every hour instead of default 15 mins
   },                -- automatically check for plugin updates
   performance = {
     cache = {
       enabled = true,
       path = vim.fn.stdpath("cache") .. "/lazy/cache",
-      clear_cache_on_update = true,
+      clear_cache_on_update = false, -- Avoid clearing cache unless necessary
     },
     rtp = {
       -- disable some rtp plugins
@@ -82,6 +77,10 @@ require("lazy").setup({
         "zipPlugin", -- For zip file support
         "man",       -- For reading man pages inside Vim
         "shada",     -- Session persistence
+        -- More plugins to disable
+        "spellfile_plugin", -- Spell checking
+        "logiPat",          -- Legacy pattern matching
+        "rrhelper",         -- Rarely used remote debugging helper
       },
     },
     concurrency = concurrency, -- Add concurrency here
