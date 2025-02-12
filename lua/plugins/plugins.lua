@@ -100,7 +100,7 @@ return {
     opts = {
       indent = { enable = false }, -- Disable indentation for performance
     },
-    event = { "BufReadPre", "BufNewFile" },             -- Lazy load Treesitter for improved startup speed
+    event = "BufReadPre",             -- Lazy load Treesitter for improved startup speed
   },
   {
     "stevearc/conform.nvim",
