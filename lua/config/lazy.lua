@@ -24,6 +24,8 @@ require("lazy").setup({
     -- import/override with your plugins
     { import = "plugins" },
   },
+  -- Use :Lazy sync, since auto-detect updates is disabled
+  change_detection = { enabled = false, notify = false },
   defaults = {
     -- By default, only LazyVim plugins will be lazy-loaded. Your custom plugins will load during startup.
     -- If you know what you're doing, you can set this to `true` to have all your custom plugins lazy-loaded by default.
@@ -48,6 +50,40 @@ require("lazy").setup({
     { "Exafunction/codeium.nvim",                    event = "InsertEnter" },
     { "hrsh7th/nvim-cmp",                            event = "InsertEnter" },
     { "rafamadriz/friendly-snippets",                after = "nvim-cmp" },
+    {"saghen/blink.cmp", event = "InsertEnter" },
+    {"lewis6991/gitsigns.nvim", event = "BufReadPost" },
+    {
+      "MagicDuck/grug-far.nvim",
+      cmd = "GrugFar",
+      keys = { "<leader>sr" },
+    },
+    {
+      "echasnovski/mini.hipatterns",
+      event = "BufReadPost",
+    },
+    {
+      "mfussenegger/nvim-lint",
+      event = { "BufReadPost", "InsertLeave", "BufWritePost" },
+    },
+    {
+      "nvim-treesitter/nvim-treesitter-context",
+      event = "BufReadPost",
+    },
+    {
+      "windwp/nvim-ts-autotag",
+      event = "BufReadPost",
+    },
+    {
+      "folke/persistence.nvim",
+      event = "BufReadPre",
+      keys = { "<leader>qS", "<leader>ql", "<leader>qd", "<leader>qs" },
+    },
+    {
+      "folke/todo-comments.nvim",
+      event = "BufReadPost",
+      cmd = { "TodoTrouble", "TodoTelescope" },
+      keys = { "[t", "<leader>st" },
+    },
     -- Disabled plugins
     { "catppuccin/nvim",                             enabled = false },
   },
