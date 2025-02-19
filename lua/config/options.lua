@@ -17,16 +17,6 @@ vim.g.autoformat = false -- Disable autoformat
 -- Disable diagnostics by default
 vim.diagnostic.enable(false)
 
--- Optimize startup time by disabling some built-in plugins
-vim.g.loaded_matchit = 1
-vim.g.loaded_matchparen = 1
-vim.g.loaded_netrwPlugin = 1
-vim.g.loaded_2html_plugin = 1      -- Disables HTML conversion plugin
-vim.g.loaded_tutor_mode_plugin = 1 -- Disables built-in tutorial
-vim.g.loaded_netrw = 1
-vim.g.loaded_netrwSettings = 1
-vim.g.loaded_netrwFileHandlers = 1
-
 -- Old terminal cursor
 vim.opt.guicursor = "n-v-c-sm:block,i-ci-ve:hor1,r-cr-o:hor1"
 
