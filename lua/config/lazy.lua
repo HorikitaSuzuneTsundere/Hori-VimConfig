@@ -14,7 +14,7 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
-local concurrency = math.min(vim.uv.available_parallelism() * 2, 16)
+local concurrency = math.min(vim.uv.available_parallelism(), 8)  -- Reduced multiplier
 
 require("lazy").setup({
   debug = false, -- Disable Lazy.nvim debug logs
