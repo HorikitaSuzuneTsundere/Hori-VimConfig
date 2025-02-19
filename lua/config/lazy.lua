@@ -106,10 +106,20 @@ require("lazy").setup({
         "gzip", -- For compressed files
         "matchit",
         "matchparen",
+        "netrw",
         "netrwPlugin",
+        "netrwSettings",
+        "netrwFileHandlers",
+        "tar",
         "tarPlugin", -- For tar file support
+        "getscript",
+        "getscriptPlugin",
+        "vimball",
+        "vimballPlugin",
+        "2html_plugin",
         "tohtml",
         "tutor",
+        "zip",
         "zipPlugin", -- For zip file support
         "man",       -- For reading man pages inside Vim
         "shada",     -- Session persistence
