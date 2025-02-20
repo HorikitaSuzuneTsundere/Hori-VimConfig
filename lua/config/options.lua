@@ -21,6 +21,9 @@ vim.loader.enable()
 vim.g.loaded_perl_provider = 0
 vim.g.loaded_ruby_provider = 0
 
+-- setup python host
+vim.g.python3_host_prog = 'C:\\Users\\test\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
+
 -- Disable diagnostics by default
 vim.diagnostic.enable(false)
 
