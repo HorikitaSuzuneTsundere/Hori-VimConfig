@@ -14,6 +14,13 @@ vim.opt.shadafile = "NONE" -- Disable shada file completely
 -- in lua/config/options.lua
 vim.g.autoformat = false -- Disable autoformat
 
+-- Reduces Lua parsing/compilation time
+vim.loader.enable()
+
+-- Disable providers
+vim.g.loaded_perl_provider = 0
+vim.g.loaded_ruby_provider = 0
+
 -- Disable diagnostics by default
 vim.diagnostic.enable(false)
 
