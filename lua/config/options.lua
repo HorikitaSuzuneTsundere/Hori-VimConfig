@@ -44,8 +44,6 @@ vim.opt.history = 50              -- Reduces number of commands to remember
 vim.opt.synmaxcol = 128           -- Only highlight first 128 columns for syntax
 vim.opt.redrawtime = 1500         -- Maximum time spent on syntax highlighting
 
-vim.opt.fillchars = { eob = " " } -- Removes ~ from empty lines
-
 -- Turn off loggers
 vim.lsp.set_log_level("OFF")      -- Disables LSP logging completely
 vim.fn.setenv("NVIM_LOG_FILE", "NUL")  -- Redirect general logs
