@@ -10,5 +10,6 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     -- Combine both BufWritePre operations
     vim.cmd([[%s/\s\+$//e | %s/\n\+\%$//e]])
     vim.opt_local.fileformat = "unix"
+    vim.opt.fillchars = { eob = " " } -- Removes ~ from empty lines
   end,
 })
