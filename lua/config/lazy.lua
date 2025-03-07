@@ -86,6 +86,8 @@ require("lazy").setup({
     },
     -- Disabled plugins
     { "catppuccin/nvim",                             enabled = false },
+    -- VeryLazies
+    { "monaqa/dial.nvim",  event = "VeryLazy" },
   },
   install = { colorscheme = { "tokyonight" } },
   checker = {
