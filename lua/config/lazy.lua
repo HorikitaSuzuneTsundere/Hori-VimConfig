@@ -5,7 +5,7 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
   if vim.v.shell_error ~= 0 then
     vim.api.nvim_echo({
       { "Failed to clone lazy.nvim:\n", "ErrorMsg" },
-      { out,                            "WarningMsg" },
+      { out, "WarningMsg" },
       { "\nPress any key to exit..." },
     }, true, {})
     vim.fn.getchar()
@@ -17,15 +17,12 @@ vim.opt.rtp:prepend(lazypath)
 local concurrency = math.min(vim.uv.available_parallelism(), 8)  -- Reduced multiplier
 
 require("lazy").setup({
-  debug = false, -- Disable Lazy.nvim debug logs
   spec = {
     -- add LazyVim and import its plugins
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
     -- import/override with your plugins
     { import = "plugins" },
   },
-  -- Use :Lazy sync, since auto-detect updates is disabled
-  change_detection = { enabled = false, notify = false },
   defaults = {
     -- By default, only LazyVim plugins will be lazy-loaded. Your custom plugins will load during startup.
     -- If you know what you're doing, you can set this to `true` to have all your custom plugins lazy-loaded by default.
@@ -36,7 +33,6 @@ require("lazy").setup({
     -- version = "*", -- try installing the latest stable version for plugins that support semver
   },
   plugins = {
-    -- Specific events per plugin
     { "nvim-treesitter/nvim-treesitter",             event = "BufReadPre" },
     { "folke/trouble.nvim",                          cmd = "TroubleToggle" },
     { "folke/flash.nvim",                            keys = { "s", "S", "f", "F", "t", "T" } },
@@ -50,51 +46,19 @@ require("lazy").setup({
     { "Exafunction/codeium.nvim",                    event = "InsertEnter" },
     { "hrsh7th/nvim-cmp",                            event = "InsertEnter" },
     { "rafamadriz/friendly-snippets",                after = "nvim-cmp" },
-    {"saghen/blink.cmp", event = "InsertEnter" },
-    {"lewis6991/gitsigns.nvim", event = "BufReadPost" },
-    {
-      "MagicDuck/grug-far.nvim",
-      cmd = "GrugFar",
-      keys = { "<leader>sr" },
-    },
-    {
-      "echasnovski/mini.hipatterns",
-      event = "BufReadPost",
-    },
-    {
-      "mfussenegger/nvim-lint",
-      event = { "BufReadPost", "InsertLeave", "BufWritePost" },
-    },
-    {
-      "nvim-treesitter/nvim-treesitter-context",
-      event = "BufReadPost",
-    },
-    {
-      "windwp/nvim-ts-autotag",
-      event = "BufReadPost",
-    },
-    {
-      "folke/persistence.nvim",
-      event = "BufReadPre",
-      keys = { "<leader>qS", "<leader>ql", "<leader>qd", "<leader>qs" },
-    },
-    {
-      "folke/todo-comments.nvim",
-      event = "BufReadPost",
-      cmd = { "TodoTrouble", "TodoTelescope" },
-      keys = { "[t", "<leader>st" },
-    },
-    -- Disabled plugins
+    { "saghen/blink.cmp",                            event = "InsertEnter" },
+    { "lewis6991/gitsigns.nvim",                     event = "BufReadPost" },
+    { "MagicDuck/grug-far.nvim",                     cmd = "GrugFar", keys = { "<leader>sr" } },
+    { "echasnovski/mini.hipatterns",                 event = "BufReadPost" },
+    { "mfussenegger/nvim-lint",                      event = { "BufReadPost", "InsertLeave", "BufWritePost" } },
+    { "nvim-treesitter/nvim-treesitter-context",     event = "BufReadPost" },
+    { "windwp/nvim-ts-autotag",                      event = "BufReadPost" },
+    { "folke/persistence.nvim",                      event = "BufReadPre", keys = { "<leader>qS", "<leader>ql", "<leader>qd", "<leader>qs" } },
+    { "folke/todo-comments.nvim",                    event = "BufReadPost", cmd = { "TodoTrouble", "TodoTelescope" }, keys = { "[t", "<leader>st" } },
     { "catppuccin/nvim",                             enabled = false },
-    -- VeryLazies
-    { "monaqa/dial.nvim",  event = "VeryLazy" },
+    { "monaqa/dial.nvim",                           event = "VeryLazy" },
   },
   install = { colorscheme = { "tokyonight" } },
-  checker = {
-    enabled = true, -- check for plugin updates periodically
-    notify = false, -- notify on update
-    frequency = 3600, -- Check for updates every hour instead of default 15 mins
-  },                -- automatically check for plugin updates
   performance = {
     cache = {
       enabled = true,
