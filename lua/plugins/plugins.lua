@@ -1,69 +1,104 @@
+-- plugins.lua
+
+-- ============================================================================
+-- PERFORMANCE OPTIMIZATION HELPERS
+-- ============================================================================
+
+-- Common performance settings shared across plugins
+local function get_performance_settings()
+  return {
+    logging = {
+      level = vim.log.levels.OFF  -- Disable logging for better performance
+    },
+    lazy_loading = {
+      -- Events that represent good lazy-loading triggers
+      edit_events = { "BufReadPost", "BufNewFile" },
+      write_events = { "BufWritePre" },
+      ui_events = { "VeryLazy" }
+    }
+  }
+end
+
+local perf = get_performance_settings()
+
+-- ============================================================================
+-- PLUGIN CONFIGURATIONS
+-- ============================================================================
+
 return {
-  { -- Disable inlay hints
+  -- ----------------------------------------------------------------------------
+  -- LSP Configuration
+  -- ----------------------------------------------------------------------------
+  {
     "neovim/nvim-lspconfig",
+    description = "Core LSP client configuration",
     opts = {
+      -- Disable inlay hints to reduce visual noise and improve performance
       inlay_hints = {
         enabled = false,
       },
     },
-    event = { "BufReadPost", "BufNewFile" },
+    -- Lazy load when actually editing files
+    event = perf.lazy_loading.edit_events,
   },
+
+  -- ----------------------------------------------------------------------------
+  -- UI Enhancement
+  -- ----------------------------------------------------------------------------
   {
     "folke/snacks.nvim",
-    --@type snacks.Config
+    description = "UI picker with performance optimizations",
     opts = {
+      -- Disable smooth scrolling to reduce animation overhead
       scroll = {
-        enabled = false, -- Disable smooth scrolling
+        enabled = false,
       },
       picker = {
         -- Core performance settings
         performance = {
-          async_loading = true, -- Non-blocking loading
+          async_loading = true,  -- Use non-blocking loading
           cache = {
-            enabled = true,     -- Enable caching
-            max_entries = 100,  -- Optimal for most users
-            ttl = 3600,         -- 1 hour cache expiration
-            eviction_policy = "LRU",
+            enabled = true,      -- Enable result caching
+            max_entries = 100,   -- Balance between memory usage and cache hits
+            ttl = 3600,          -- Cache lifetime (1 hour)
+            eviction_policy = "LRU",  -- Least Recently Used eviction
           },
-          debounce = 100, -- Faster than default 150ms
-          throttle = 50   -- Render interval in ms
+          debounce = 100,  -- Reduce input processing frequency (ms)
+          throttle = 50     -- Limit render frequency (ms)
         },
-        -- Render optimizations
+        -- UI layout optimizations
         layout = {
-          width = 0.85,        -- Optimal screen coverage
-          height = 0.75,
-          preview_cutoff = 50, -- Disable preview for large results
-          horizontal = {       -- Better performance than vertical
-            mirror = false,
-            preview_width = 0.45
-          },
-          vertical = {
-            mirror = false,
-            preview_height = 0.35,
-          },
+          width = 0.85,         -- Optimal screen coverage
+          height = 0.75,        -- Optimal screen coverage
+          preview_cutoff = 50,  -- Disable preview for large results
         },
+        -- Disable unnecessary features
         features = {
-          animations = false,       -- Biggest performance gain
-          image_previews = false,
-          nutritional_info = false, -- Changed from calorie_counter
-          social_sharing = false
+          animations = false,     -- Disable animations for performance
+          image_previews = false, -- Disable image previews
         },
       },
     },
-    event = "VeryLazy"
+    event = perf.lazy_loading.ui_events,
   },
+
+  -- ----------------------------------------------------------------------------
+  -- Development Tools
+  -- ----------------------------------------------------------------------------
   {
     "williamboman/mason.nvim",
-    cmd = "Mason",
-    log_level = vim.log.levels.OFF,  -- Disable mason.nvim logs
+    description = "Tool installer with optimized package management",
+    cmd = "Mason",  -- Only load when the Mason command is explicitly used
+    log_level = perf.logging.level,
     opts = function(_, opts)
+      -- Exclude packages that might be provided by other means or not needed
       local exclude_pkgs = {
         ["lua-language-server"] = true,
         ["shfmt"] = true,
         ["stylua"] = true,
       }
 
-      -- Ensure `opts.ensure_installed` is valid before applying the filter
+      -- Filter out excluded packages from auto-installation
       if opts.ensure_installed and type(opts.ensure_installed) == "table" then
         local filtered = {}
         for _, pkg in ipairs(opts.ensure_installed) do
@@ -75,15 +110,21 @@ return {
       end
     end,
   },
+
+  -- ----------------------------------------------------------------------------
+  -- Notification System
+  -- ----------------------------------------------------------------------------
   {
     "folke/noice.nvim",
+    description = "Enhanced UI with focused optimizations for notifications",
     opts = {
+      -- Optimize LSP-related UI elements
       lsp = {
-        progress = { enabled = false },  -- Disable LSP progress UI (removes frequent updates)
-        signature = { enabled = false }, -- Disable signature help popups (avoids UI lag)
+        progress = { enabled = false },  -- Disable LSP progress UI
+        signature = { enabled = false }, -- Disable signature help popups
         message = { enabled = false },   -- Disable LSP messages
       },
-      -- Optimize notifications and messages
+      -- Minimize notification visual impact
       messages = {
         view = "mini",
         view_error = "mini",
@@ -91,20 +132,33 @@ return {
         view_history = "mini",
         view_search = "virtualtext",
       },
-      throttle = 100, -- Reduce CPU usage by limiting UI updates
+      throttle = 100, -- Limit UI update frequency
     },
-    event = "VeryLazy",
+    event = perf.lazy_loading.ui_events,
   },
+
+  -- ----------------------------------------------------------------------------
+  -- Syntax and Parsing
+  -- ----------------------------------------------------------------------------
   {
     "nvim-treesitter/nvim-treesitter",
+    description = "Syntax parsing with performance optimizations",
     opts = {
-      indent = { enable = false }, -- Disable indentation for performance
+      -- Disable indentation for performance
+      indent = { enable = false },
     },
-    event = "BufReadPre",             -- Lazy load Treesitter for improved startup speed
+    -- Only load when actually reading a file
+    event = "BufReadPre",
   },
+
+  -- ----------------------------------------------------------------------------
+  -- Code Formatting
+  -- ----------------------------------------------------------------------------
   {
     "stevearc/conform.nvim",
-    log_level = vim.log.levels.OFF,  -- Disable conform.nvim logs
-    event = { "BufWritePre" },
+    description = "Code formatter with minimized overhead",
+    log_level = perf.logging.level,
+    -- Only load when preparing to write a file
+    event = perf.lazy_loading.write_events,
   },
 }
