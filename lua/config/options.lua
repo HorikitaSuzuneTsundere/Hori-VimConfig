@@ -16,6 +16,9 @@ vim.g.autoformat = false -- Disable autoformat
 -- Reduces Lua parsing/compilation time
 vim.loader.enable()
 
+-- Disable diagnostics by default
+vim.diagnostic.enable(false)
+
 -- setup python host
 vim.g.python3_host_prog = 'C:\\Users\\test\\AppData\\Local\\Programs\\Python\\Python313\\python.exe'
 
