@@ -10,12 +10,6 @@ local function get_performance_settings()
     logging = {
       level = vim.log.levels.OFF  -- Disable logging for better performance
     },
-    lazy_loading = {
-      -- Events that represent good lazy-loading triggers
-      edit_events = { "BufReadPost", "BufNewFile" },
-      write_events = { "BufWritePre" },
-      ui_events = { "VeryLazy" }
-    }
   }
 end
 
@@ -38,8 +32,6 @@ return {
         enabled = false,
       },
     },
-    -- Lazy load when actually editing files
-    event = perf.lazy_loading.edit_events,
   },
 
   -- ----------------------------------------------------------------------------
@@ -79,7 +71,6 @@ return {
         },
       },
     },
-    event = perf.lazy_loading.ui_events,
   },
 
   -- ----------------------------------------------------------------------------
@@ -134,7 +125,6 @@ return {
       },
       throttle = 100, -- Limit UI update frequency
     },
-    event = perf.lazy_loading.ui_events,
   },
 
   -- ----------------------------------------------------------------------------
@@ -147,8 +137,6 @@ return {
       -- Disable indentation for performance
       indent = { enable = false },
     },
-    -- Only load when actually reading a file
-    event = "BufReadPre",
   },
 
   -- ----------------------------------------------------------------------------
@@ -158,7 +146,5 @@ return {
     "stevearc/conform.nvim",
     description = "Code formatter with minimized overhead",
     log_level = perf.logging.level,
-    -- Only load when preparing to write a file
-    event = perf.lazy_loading.write_events,
   },
 }
