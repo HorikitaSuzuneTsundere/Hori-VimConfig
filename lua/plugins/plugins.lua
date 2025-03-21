@@ -136,6 +136,8 @@ return {
     opts = {
       -- Disable indentation for performance
       indent = { enable = false },
+      -- Required to render LaTeX math expressions
+      ensure_installed = 'latex',
     },
   },
 
