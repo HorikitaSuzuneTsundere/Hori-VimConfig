@@ -8,4 +8,11 @@ To truly harness the *maximum potential* of this configuration, make sure you’
 - 🦇 **bat** – A `cat` clone with syntax highlighting and Git integration
 - 🧾 **lsd** – The modern, beautiful `ls` replacement
 
+---
+
+🔧 Optional (if using Git):
+
+- 🧑‍💻 **git** – Version control system
+- 🖱️ **lazygit** – Terminal UI for Git
+
 Make your terminal workflow *faster, smarter, and more enjoyable* with these tools. Don't settle for stock.
