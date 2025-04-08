@@ -84,3 +84,11 @@ This configuration intentionally disables many familiar features. It's designed 
 ## 🤝 Contributing
 
 Feel free to submit pull requests or suggest improvements! Let's make the path to Vim mastery even better together.
+
+## ⚡ Want Speed Without the Bloat?
+
+If you're a developer who values **performance, minimalism, and full control**, check out the [`nvim_lite`](https://github.com/HorikitaSuzuneTsundere/Hori-VimConfig/tree/main/nvim_lite) directory.
+
+It's a stripped-down, blazing-fast variant of this config — zero fluff, just the essentials. Perfect as a clean foundation to build your own high-performance Neovim workflow without the noise.
+
+No distractions. No hand-holding. Just speed.
