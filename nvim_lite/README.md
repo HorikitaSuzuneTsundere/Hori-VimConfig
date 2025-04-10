@@ -15,4 +15,9 @@ To truly harness the *maximum potential* of this configuration, make sure you’
 - 🧑‍💻 **git** – Version control system
 - 🖱️ **lazygit** – Terminal UI for Git
 
+💻 **Shell Setup**:
+
+- 🐚 **Bash** (Linux/macOS): Default shell for scripting and automation.
+- 💾 **MinGW** (Windows): Lightweight environment that provides Bash on Windows.
+
 Make your terminal workflow *faster, smarter, and more enjoyable* with these tools. Don't settle for stock.
