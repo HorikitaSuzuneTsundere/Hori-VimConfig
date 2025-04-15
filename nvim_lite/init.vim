@@ -24,6 +24,6 @@ set wildmode=list:longest
 set wildignore=*.docx,*.jpg,*.png,*.gif,*.pdf,*.pyc,*.exe,*.flv,*.img,*.xlsx
 set undofile
 set clipboard+=unnamedplus
-" dependencies: bat fd  grep lazygit lsd
-" terminal: cmd
-" fonts: hack nerd font mono
+" dependencies: bat fd grep lazygit lsd
+" terminal: cmd/ bash
+" fonts: consolas/ monospace
