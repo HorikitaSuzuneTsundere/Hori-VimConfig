@@ -56,8 +56,7 @@ vim.opt.ttimeoutlen = 10      -- Faster mode switching
 vim.opt.completeopt = "menuone,noselect,noinsert"  -- Better completion experience
 
 -- Improve UI Experience
-vim.opt.signcolumn = "yes"
-vim.opt.cursorline = true
+vim.opt.signcolumn = "yes:1"
 vim.opt.list = true
 
 -- Disable Arrow Keys
