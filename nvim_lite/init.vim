@@ -26,4 +26,4 @@ set undofile
 set clipboard+=unnamedplus
 " dependencies: bat fd  grep lazygit lsd
 " terminal: cmd
-" fonts: cascadia mono/ mono default font
+" fonts: hack nerd font mono
