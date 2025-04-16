@@ -4,11 +4,9 @@ filetype plugin on
 filetype indent on
 syntax on
 set number
-set cursorline
 set shiftwidth=2
 set tabstop=2
 set expandtab
-set nobackup
 set scrolloff=10
 set nowrap
 set incsearch
