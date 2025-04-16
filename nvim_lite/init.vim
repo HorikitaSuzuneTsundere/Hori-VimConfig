@@ -7,7 +7,7 @@ set number
 set shiftwidth=2
 set tabstop=2
 set expandtab
-set scrolloff=10
+set scrolloff=5
 set nowrap
 set incsearch
 set ignorecase
@@ -24,4 +24,5 @@ set undofile
 set clipboard+=unnamedplus
 " dependencies: bat fd grep lazygit lsd
 " terminal: cmd/ bash
+" commands: win+R/ alt+f2
 " fonts: consolas/ monospace
