@@ -7,7 +7,7 @@ set number
 set shiftwidth=2
 set tabstop=2
 set expandtab
-set scrolloff=5
+set scrolloff=3
 set nowrap
 set incsearch
 set ignorecase
