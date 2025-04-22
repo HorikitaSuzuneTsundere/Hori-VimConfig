@@ -1,9 +1,5 @@
 set nocompatible
-filetype on
-filetype plugin on
-filetype indent on
-syntax on
-set number
+syntax off
 set shiftwidth=2
 set tabstop=2
 set expandtab
