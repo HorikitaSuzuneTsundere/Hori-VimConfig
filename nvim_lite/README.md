@@ -7,6 +7,7 @@ To truly harness the *maximum potential* of this configuration, make sure you’
 - 🧠 **grep** – The classic, powerful text search utility
 - 🦇 **bat** – A `cat` clone with syntax highlighting and Git integration
 - 🧾 **lsd** – The modern, beautiful `ls` replacement
+- 🛠️ **xargs** – Chains commands using piped input
 
 ---
 
