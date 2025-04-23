@@ -19,6 +19,7 @@ set wildignore=*.docx,*.jpg,*.png,*.gif,*.pdf,*.pyc,*.exe,*.flv,*.img,*.xlsx
 set undofile
 set clipboard+=unnamedplus
 set ttyfast
+set lazyredraw
 set noswapfile
 set nobackup
 set nowritebackup
