@@ -58,7 +58,7 @@ vim.api.nvim_create_autocmd('BufWritePre', {
   group = vim.api.nvim_create_augroup('TrimWhitespace', { clear = true }),
   callback = function()
     local save_view = vim.fn.winsaveview()
-    vim.cmd.keepjumps([[%s/\s\+$//e]])
+    vim.cmd([[keepjumps %s/\s\+$//e]])
     vim.fn.winrestview(save_view)
   end
 })
