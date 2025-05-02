@@ -3,10 +3,9 @@
 To truly harness the *maximum potential* of this configuration, make sure you’ve got these essential tools installed:
 
 - ⚡ **fd** – A blazing-fast alternative to `find`
-- 🔍 **fzf** – Fuzzy finder for lightning-fast search
 - 🧠 **grep** – The classic, powerful text search utility
-- 🦇 **bat** – A `cat` clone with syntax highlighting and Git integration
-- 🧾 **lsd** – The modern, beautiful `ls` replacement
+- 🐱 **cat** – The classic file concatenation and printing tool
+- 📂 **ls** – The standard directory listing command
 - 🛠️ **xargs** – Chains commands using piped input
 
 ---
