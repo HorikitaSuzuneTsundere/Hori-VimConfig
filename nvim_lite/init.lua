@@ -1,113 +1,119 @@
 -- === Startup Optimization ===
-vim.loader.enable()
+-- Enable the new loader if available and not already enabled.
+if vim.loader and not vim.loader.enabled then
+  vim.loader.enable()
+end
 
--- === Fast Option Setting (Direct Access, No Sugar) ===
-local set = vim.o
-local wset = vim.wo
-local bset = vim.bo
+-- Shorthand for option tables
+local set   = vim.o   -- global options
+local wset  = vim.wo  -- window options
+local bset  = vim.bo  -- buffer options
 
-set.mouse = ""
-set.updatetime = 100
-set.lazyredraw = true
-set.ttyfast = true
-set.synmaxcol = 200
-set.redrawtime = 1000
-set.maxmempattern = 2000
-set.shadafile = "NONE" -- temporary
+-- === Performance and Resource Management ===
+set.mouse         = ""                -- Disable mouse support; enterprise interfaces may want strict key-based input.
+set.updatetime    = 100               -- Faster responsiveness
+set.lazyredraw    = true              -- Only redraw when needed
+set.ttyfast       = true              -- Optimization for fast terminal redraw
+set.synmaxcol     = 200               -- Limit syntax highlighting width for performance
+set.redrawtime    = 1000              -- Max time for full redraw
+set.maxmempattern = 2000              -- Cap pattern search memory
+set.shadafile     = "NONE"            -- Defer persistent state; enterprise setups defer read/write.
 
-set.number = true
-wset.relativenumber = true
-set.scrolloff = 10
-set.sidescrolloff = 8
-wset.wrap = false
+-- === UI and Editing Experience ===
+set.number        = true              -- Show absolute line numbers
+wset.relativenumber = true           -- And relative line numbers for context
+set.scrolloff     = 10                -- Keep a buffer of lines when scrolling
+set.sidescrolloff = 8                 -- Horizontal padding
+wset.wrap         = false             -- Disable wrapping (preferred in coding environments)
+wset.linebreak    = false             -- No automatic line breaks
+wset.breakindent  = false             -- No break indent
 
-wset.linebreak = false
-wset.breakindent = false
+set.showmode      = false             -- Status bar for mode can be handled by enterprise statusline solutions
+set.undofile      = true              -- Enable persistent undo for large datasets
+set.swapfile      = false             -- Avoid swap files in streamlined setups
+set.backup        = false             -- Enterprise deployments handle version control separately
+set.writebackup   = false             -- Disable redundant writes
 
-set.showmode = false
-set.undofile = true
-set.swapfile = false
-set.backup = false
-set.writebackup = false
+set.timeoutlen    = 500               -- Faster timeout for mapped sequences
+set.ttimeoutlen   = 10                -- Faster keycode timeouts
+set.keymodel      = ""                -- Avoid legacy keymodel semantics
 
-set.timeoutlen = 500
-set.ttimeoutlen = 10
-set.keymodel = ""
+-- === Indentation and Formatting ===
+set.expandtab     = true              -- Use spaces over tabs
+set.shiftwidth    = 2                 -- Indentation width
+set.tabstop       = 2                 -- Visual tab width
+set.softtabstop   = 2                 -- Soft tab alignment
+set.smartindent   = true              -- Auto-indent new lines intelligently
+set.autoindent    = true              -- Continuation indent
 
--- Indentation
-set.expandtab = true
-set.shiftwidth = 2
-set.tabstop = 2
-set.softtabstop = 2
-set.smartindent = true
-set.autoindent = true
+-- === Search Enhancements ===
+set.ignorecase    = true              -- Case insensitive search by default
+set.smartcase     = true              -- Use case sensitivity if capitals are used
+set.hlsearch      = true              -- Highlight search results
+set.incsearch     = true              -- Incremental search feedback
 
--- Search
-set.ignorecase = true
-set.smartcase = true
-set.hlsearch = true
-set.incsearch = true
+-- === Interface Customization ===
+wset.signcolumn   = "yes:1"           -- Always show sign column to avoid shifting the text
+set.cmdheight     = 0                 -- Maximize screen real estate
+set.completeopt   = "menuone,noinsert,noselect" -- Better completion experience
+set.splitright    = true              -- New vertical splits on the right
+set.splitbelow    = true              -- New horizontal splits below
 
--- UI
-wset.signcolumn = "yes:1"
-set.cmdheight = 0
-set.completeopt = "menuone,noinsert,noselect"
-set.splitright = true
-set.splitbelow = true
+-- === Memory and Undo Persistence ===
+set.history       = 10000             -- Long command history
+set.undolevels    = 1000              -- Extended undo levels
 
--- Memory & Undo
-set.history = 10000
-set.undolevels = 1000
-
--- === Arrow Key Blackout (No Closures) ===
+-- === Arrow Key Blackout (Force Keyboard Discipline) ===
 local set_nop = vim.keymap.set
-set_nop("n", "<Up>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("n", "<Down>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("n", "<Left>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("n", "<Right>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("v", "<Up>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("v", "<Down>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("v", "<Left>", "<Nop>", { desc = "Arrow Disabled" })
-set_nop("v", "<Right>", "<Nop>", { desc = "Arrow Disabled" })
+-- Enterprise loop to disable arrow keys in Normal and Visual modes:
+for _, mode in ipairs({"n", "v"}) do
+  for _, arrow in ipairs({"<Up>", "<Down>", "<Left>", "<Right>"}) do
+    set_nop(mode, arrow, "<Nop>", { desc = "Arrow Disabled" })
+  end
+end
 
--- === Whitespace Cleaner ===
+-- === Whitespace Cleaner (Pre-Save Hook) ===
 vim.api.nvim_create_autocmd("BufWritePre", {
-  group = vim.api.nvim_create_augroup("TrimWhitespace", { clear = true }),
+  group = vim.api.nvim_create_augroup("EnterpriseTrimWhitespace", { clear = true }),
   pattern = "*",
   callback = function()
-    local view = vim.fn.winsaveview()
-    vim.cmd("silent! keepjumps %s/\\s\\+$//e")
-    vim.fn.winrestview(view)
+    local view = vim.fn.winsaveview()  -- Save current window state
+    vim.cmd("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
+    vim.fn.winrestview(view)  -- Restore window state
   end,
 })
 
--- === Large FileType Optimization (Conditional) ===
+-- === Adaptive Optimization for Large Files ===
 vim.api.nvim_create_autocmd("FileType", {
-  group = vim.api.nvim_create_augroup("LargeFileOpts", { clear = true }),
+  group = vim.api.nvim_create_augroup("EnterpriseLargeFileOpts", { clear = true }),
   pattern = { "json", "yaml", "markdown" },
   callback = function()
     local line_count = vim.fn.line("$")
     if line_count > 1000 then
-      vim.opt_local.foldmethod = "manual"
-      vim.opt_local.synmaxcol = 300
+      vim.opt_local.foldmethod = "manual"  -- Manual folding for performance
+      vim.opt_local.synmaxcol   = 300         -- Reduce syntax processing overhead
     else
-      vim.opt_local.foldmethod = "indent"
-      vim.opt_local.synmaxcol = 500
+      vim.opt_local.foldmethod = "indent"   -- Indentation-based folding in normal cases
+      vim.opt_local.synmaxcol   = 500         -- Slightly relaxed for smaller files
     end
   end,
 })
 
--- === Delayed Non-Critical Initialization ===
+-- === Deferred Non-Critical Initialization ===
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
-    -- Restore shada (expensive; deferred)
+    -- Restore shada settings after initial startup; enterprise setups might persist session state externally.
     vim.o.shadafile = ""
     vim.o.shada = "!,'100,<50,s10,h"
-    local file = vim.fn.stdpath("data") .. "/shada/main.shada"
-    if vim.fn.filereadable(file) == 1 then
+    local shada_path = vim.fn.stdpath("data") .. "/shada/main.shada"
+    if vim.fn.filereadable(shada_path) == 1 then
       pcall(vim.cmd, "silent! rshada")
     end
-    -- Enable clipboard
+
+    -- Set system clipboard integration (critical for enterprise copy-paste)
     vim.o.clipboard = "unnamedplus"
+
+    -- Placeholder: Initialize additional enterprise modules (e.g., LSP, Git integration, custom logging, etc.)
+    -- vim.schedule(function() require("enterprise.plugins").init() end)
   end,
 })
