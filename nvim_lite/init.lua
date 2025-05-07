@@ -117,3 +117,60 @@ vim.api.nvim_create_autocmd("VimEnter", {
     -- vim.schedule(function() require("enterprise.plugins").init() end)
   end,
 })
+
+-- === Integrated Statusline with Inline Search Count ===
+-- Mode map to human-readable form
+local mode_map = {
+  n = "NORMAL",      no = "N·OP",         nov = "N·OP",
+  i = "INSERT",      ic = "INS·COMP",     ix = "INS·X",
+  v = "VISUAL",      V = "V·LINE",        [""] = "V·BLOCK",
+  c = "COMMAND",     cv = "VIM·EX",       ce = "EX",
+  r = "REPLACE",     R = "REPLACE",       Rx = "REPL·X",
+  s = "SELECT",      S = "S·LINE",        [""] = "S·BLOCK",
+  t = "TERMINAL"
+}
+
+-- Return current mode (fallback safe)
+_G.get_mode = function()
+  local mode = vim.api.nvim_get_mode().mode
+  return mode_map[mode] or ("MODE(" .. vim.fn.escape(mode, ' ') .. ")")
+end
+
+-- Return current search count
+_G.search_info = function()
+  local ok, s = pcall(vim.fn.searchcount, { maxcount = 0, timeout = 100 })
+  if ok and s and s.total and s.total > 0 then
+    return string.format(" %d/%d", s.current or 0, s.total)
+  end
+  return ""
+end
+
+-- Set statusline
+vim.o.statusline = table.concat({
+  " %{v:lua.get_mode()} ",        -- Mode indicator
+  "%f ",                          -- File path
+  "%h%m%r",                       -- Help, Modified, Readonly flags
+  "%=",                           -- Alignment separator
+  "Ln %l, Col %c",                -- Line & column
+  "%{v:lua.search_info()}",       -- Inline search result count
+  " %P",                          -- Percentage through file
+})
+
+-- === ESC Behavior Enhancement (No Highlight Search) ===
+-- Function to clear search highlight when pressing Esc
+
+local function clear_search_highlight()
+  -- Check if hlsearch is active, if so, clear it
+  if vim.v.hlsearch == 1 then
+    vim.cmd("nohlsearch")
+  end
+  return "<Esc>"
+end
+
+-- Registering the keymap for normal mode
+vim.keymap.set("n", "<Esc>", clear_search_highlight, {
+  expr = true,
+  silent = true,
+  noremap = true,
+  desc = "Clear search highlight on Esc"
+})
