@@ -151,7 +151,7 @@ vim.o.statusline = table.concat({
   "%f ",                          -- File path
   "%h%m%r",                       -- Help, Modified, Readonly flags
   "%=",                           -- Alignment separator
-  "Ln %l, Col %c",                -- Line & column
+  "Ln %l/%L, Col %c",                -- Line & column
   "%{v:lua.search_info()}",       -- Inline search result count
   " %P",                          -- Percentage through file
 })
