@@ -174,3 +174,55 @@ vim.keymap.set("n", "<Esc>", clear_search_highlight, {
   noremap = true,
   desc = "Clear search highlight on Esc"
 })
+
+
+-- Enforce Unix-only line endings
+vim.opt.fileformats = { "unix" }
+vim.opt.fileformat = "unix"
+
+-- Define dedicated group
+local crlf_group = vim.api.nvim_create_augroup("crlf_guard", { clear = true })
+
+-- Pure function to strip carriage returns efficiently
+local function strip_cr()
+  -- Early exits for non-editable or untyped buffers
+  if vim.bo.buftype ~= "" or vim.bo.modifiable == false then return end
+
+  -- Efficient regex match using fast scanning
+  if vim.fn.search('\r', 'nw') ~= 0 then
+    -- Use native Lua API to edit buffer lines
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    for i, line in ipairs(lines) do
+      if line:find('\r') then
+        lines[i] = line:gsub('\r', '')
+      end
+    end
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+
+    -- Enforce Unix format
+    vim.bo.fileformat = "unix"
+  end
+end
+
+-- Generic event wrapper with view preservation
+local function with_preserved_view(callback)
+  return function()
+    local ok, view = pcall(vim.fn.winsaveview)
+    pcall(callback)
+    if ok then pcall(vim.fn.winrestview, view) end
+  end
+end
+
+-- Register post-read and file-change hook
+vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, {
+  group = crlf_group,
+  pattern = "*",
+  callback = with_preserved_view(strip_cr),
+})
+
+-- Strip CR before write
+vim.api.nvim_create_autocmd("BufWritePre", {
+  group = crlf_group,
+  pattern = "*",
+  callback = strip_cr,
+})
