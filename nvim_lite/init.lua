@@ -34,8 +34,8 @@ set.swapfile      = false             -- Avoid swap files in streamlined setups
 set.backup        = false             -- Enterprise deployments handle version control separately
 set.writebackup   = false             -- Disable redundant writes
 
-set.timeoutlen    = 500               -- Faster timeout for mapped sequences
-set.ttimeoutlen   = 10                -- Faster keycode timeouts
+set.timeoutlen    = 300               -- Faster timeout for mapped sequences
+set.ttimeoutlen   = 40                -- Faster keycode timeouts
 set.keymodel      = ""                -- Avoid legacy keymodel semantics
 
 -- === Indentation and Formatting ===
@@ -75,11 +75,13 @@ end
 -- === Whitespace Cleaner (Pre-Save Hook) ===
 vim.api.nvim_create_autocmd("BufWritePre", {
   group = vim.api.nvim_create_augroup("EnterpriseTrimWhitespace", { clear = true }),
-  pattern = "*",
+  pattern = { "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
   callback = function()
-    local view = vim.fn.winsaveview()  -- Save current window state
-    vim.cmd("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
-    vim.fn.winrestview(view)  -- Restore window state
+    if vim.bo.modified then
+      local view = vim.fn.winsaveview()  -- Save current window state
+      vim.cmd("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
+      vim.fn.winrestview(view)  -- Restore window state
+    end
   end,
 })
 
@@ -102,19 +104,15 @@ vim.api.nvim_create_autocmd("FileType", {
 -- === Deferred Non-Critical Initialization ===
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
-    -- Restore shada settings after initial startup; enterprise setups might persist session state externally.
-    vim.o.shadafile = ""
-    vim.o.shada = "!,'100,<50,s10,h"
-    local shada_path = vim.fn.stdpath("data") .. "/shada/main.shada"
-    if vim.fn.filereadable(shada_path) == 1 then
-      pcall(vim.cmd, "silent! rshada")
-    end
-
-    -- Set system clipboard integration (critical for enterprise copy-paste)
-    vim.o.clipboard = "unnamedplus"
-
-    -- Placeholder: Initialize additional enterprise modules (e.g., LSP, Git integration, custom logging, etc.)
-    -- vim.schedule(function() require("enterprise.plugins").init() end)
+    vim.defer_fn(function()
+      vim.o.shadafile = ""
+      vim.o.shada = "!,'100,<50,s10,h"
+      local shada_path = vim.fn.stdpath("data") .. "/shada/main.shada"
+      if vim.fn.filereadable(shada_path) == 1 then
+        pcall(vim.cmd, "silent! rshada")
+      end
+      vim.o.clipboard = "unnamedplus"
+    end, 100)
   end,
 })
 
