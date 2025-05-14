@@ -75,7 +75,7 @@ end
 -- === Whitespace Cleaner (Pre-Save Hook) ===
 vim.api.nvim_create_autocmd("BufWritePre", {
   group = vim.api.nvim_create_augroup("EnterpriseTrimWhitespace", { clear = true }),
-  pattern = { "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
+  pattern = { "*.java", "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
   callback = function()
     if vim.bo.modified then
       local view = vim.fn.winsaveview()  -- Save current window state
