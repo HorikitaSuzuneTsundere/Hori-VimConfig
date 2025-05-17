@@ -224,3 +224,65 @@ vim.api.nvim_create_autocmd("BufWritePre", {
   pattern = "*",
   callback = strip_cr,
 })
+
+-- === Zen Mode Configuration ===
+local zen_mode = {
+  active = false,
+  saved = {},
+  config = {
+    syntax       = false,
+    number       = false,
+    relativenumber = false,
+    cursorline   = false,
+    showcmd      = false,
+    showmatch    = false,
+    laststatus   = 0,
+    cmdheight    = 1,
+  }
+}
+
+-- Utility: Apply settings from table
+local function apply_settings(tbl)
+  if tbl.syntax ~= nil then vim.cmd("syntax " .. (tbl.syntax and "on" or "off")) end
+  if tbl.number ~= nil then vim.wo.number = tbl.number end
+  if tbl.relativenumber ~= nil then vim.wo.relativenumber = tbl.relativenumber end
+  if tbl.cursorline ~= nil then vim.o.cursorline = tbl.cursorline end
+  if tbl.showcmd ~= nil then vim.o.showcmd = tbl.showcmd end
+  if tbl.showmatch ~= nil then vim.o.showmatch = tbl.showmatch end
+  if tbl.laststatus ~= nil then vim.o.laststatus = tbl.laststatus end
+  if tbl.cmdheight ~= nil then vim.o.cmdheight = tbl.cmdheight end
+end
+
+-- Zen toggle handler
+local function toggle_zen_mode()
+  if zen_mode._busy then return end
+  zen_mode._busy = true
+  vim.schedule(function()
+    zen_mode._busy = false
+  end)
+
+  zen_mode.active = not zen_mode.active
+
+  if zen_mode.active then
+    -- Save current state for full reversibility
+    zen_mode.saved = {
+      syntax       = vim.o.syntax ~= "off",
+      number       = vim.wo.number,
+      relativenumber = vim.wo.relativenumber,
+      cursorline   = vim.o.cursorline,
+      showcmd      = vim.o.showcmd,
+      laststatus   = vim.o.laststatus,
+      cmdheight    = vim.o.cmdheight,
+    }
+    apply_settings(zen_mode.config)
+  else
+    apply_settings(zen_mode.saved)
+  end
+end
+
+-- Keymap: Double space to toggle Zen
+vim.keymap.set("n", "<Space><Space>", toggle_zen_mode, {
+  desc = "Toggle Zen Mode",
+  noremap = true,
+  silent = true,
+})
