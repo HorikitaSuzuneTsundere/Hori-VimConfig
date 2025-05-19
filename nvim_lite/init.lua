@@ -243,18 +243,26 @@ local zen_mode = {
   }
 }
 
+local syntax_cmd = { on = "syntax on", off = "syntax off" }
+
 -- Utility: Apply settings from table
+local setters = {
+  syntax       = function(v) vim.cmd(syntax_cmd[v and "on" or "off"]) end,
+  number       = function(v) wset.number = v end,
+  relativenumber = function(v) wset.relativenumber = v end,
+  cursorline   = function(v) set.cursorline = v end,
+  showcmd      = function(v) set.showcmd = v end,
+  showmatch    = function(v) set.showmatch = v end,
+  laststatus   = function(v) set.laststatus = v end,
+  cmdheight    = function(v) set.cmdheight = v end,
+  showtabline  = function(v) set.showtabline = v end,
+  signcolumn   = function(v) wset.signcolumn = v end,
+}
+
 local function apply_settings(tbl)
-  if tbl.syntax ~= nil then vim.cmd("syntax " .. (tbl.syntax and "on" or "off")) end
-  if tbl.number ~= nil then vim.wo.number = tbl.number end
-  if tbl.relativenumber ~= nil then vim.wo.relativenumber = tbl.relativenumber end
-  if tbl.cursorline ~= nil then vim.o.cursorline = tbl.cursorline end
-  if tbl.showcmd ~= nil then vim.o.showcmd = tbl.showcmd end
-  if tbl.showmatch ~= nil then vim.o.showmatch = tbl.showmatch end
-  if tbl.laststatus ~= nil then vim.o.laststatus = tbl.laststatus end
-  if tbl.cmdheight ~= nil then vim.o.cmdheight = tbl.cmdheight end
-  if tbl.showtabline ~= nil then vim.o.showtabline = tbl.showtabline end
-  if tbl.signcolumn ~= nil then vim.wo.signcolumn = tbl.signcolumn end
+  for k,v in pairs(tbl) do
+    setters[k](v)
+  end
 end
 
 -- Zen toggle handler
@@ -270,15 +278,16 @@ local function toggle_zen_mode()
   if zen_mode.active then
     -- Save current state for full reversibility
     zen_mode.saved = {
-      syntax       = vim.o.syntax ~= "off",
-      number       = vim.wo.number,
-      relativenumber = vim.wo.relativenumber,
-      cursorline   = vim.o.cursorline,
-      showcmd      = vim.o.showcmd,
-      laststatus   = vim.o.laststatus,
-      cmdheight    = vim.o.cmdheight,
-      showtabline    = vim.o.showtabline,
-      signcolumn     = vim.wo.signcolumn,
+      syntax       = set.syntax ~= "off",
+      number       = wset.number,
+      relativenumber = wset.relativenumber,
+      cursorline   = set.cursorline,
+      showcmd      = set.showcmd,
+      showmatch      = set.showmatch,
+      laststatus   = set.laststatus,
+      cmdheight    = set.cmdheight,
+      showtabline    = set.showtabline,
+      signcolumn     = wset.signcolumn,
     }
     apply_settings(zen_mode.config)
   else
