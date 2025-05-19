@@ -237,7 +237,9 @@ local zen_mode = {
     showcmd      = false,
     showmatch    = false,
     laststatus   = 0,
-    cmdheight    = 1,
+    cmdheight    = 0,
+    showtabline  = 0,
+    signcolumn   = "no",
   }
 }
 
@@ -251,6 +253,8 @@ local function apply_settings(tbl)
   if tbl.showmatch ~= nil then vim.o.showmatch = tbl.showmatch end
   if tbl.laststatus ~= nil then vim.o.laststatus = tbl.laststatus end
   if tbl.cmdheight ~= nil then vim.o.cmdheight = tbl.cmdheight end
+  if tbl.showtabline ~= nil then vim.o.showtabline = tbl.showtabline end
+  if tbl.signcolumn ~= nil then vim.wo.signcolumn = tbl.signcolumn end
 end
 
 -- Zen toggle handler
@@ -273,6 +277,8 @@ local function toggle_zen_mode()
       showcmd      = vim.o.showcmd,
       laststatus   = vim.o.laststatus,
       cmdheight    = vim.o.cmdheight,
+      showtabline    = vim.o.showtabline,
+      signcolumn     = vim.wo.signcolumn,
     }
     apply_settings(zen_mode.config)
   else
