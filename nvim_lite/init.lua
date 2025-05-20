@@ -8,6 +8,9 @@ end
 local set   = vim.o   -- global options
 local wset  = vim.wo  -- window options
 local bset  = vim.bo  -- buffer options
+local cset  = vim.cmd -- cmd options
+local fset  = vim.fn
+local aset  = vim.api -- api options
 
 -- === Performance and Resource Management ===
 set.mouse         = ""                -- Disable mouse support; enterprise interfaces may want strict key-based input.
@@ -73,24 +76,24 @@ for _, mode in ipairs({"n", "v"}) do
 end
 
 -- === Whitespace Cleaner (Pre-Save Hook) ===
-vim.api.nvim_create_autocmd("BufWritePre", {
-  group = vim.api.nvim_create_augroup("EnterpriseTrimWhitespace", { clear = true }),
+aset.nvim_create_autocmd("BufWritePre", {
+  group = aset.nvim_create_augroup("EnterpriseTrimWhitespace", { clear = true }),
   pattern = { "*.java", "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
   callback = function()
-    if vim.bo.modified then
-      local view = vim.fn.winsaveview()  -- Save current window state
-      vim.cmd("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
-      vim.fn.winrestview(view)  -- Restore window state
+    if bset.modified then
+      local view = fset.winsaveview()  -- Save current window state
+      cset("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
+      fset.winrestview(view)  -- Restore window state
     end
   end,
 })
 
 -- === Adaptive Optimization for Large Files ===
-vim.api.nvim_create_autocmd("FileType", {
-  group = vim.api.nvim_create_augroup("EnterpriseLargeFileOpts", { clear = true }),
+aset.nvim_create_autocmd("FileType", {
+  group = aset.nvim_create_augroup("EnterpriseLargeFileOpts", { clear = true }),
   pattern = { "json", "yaml", "markdown" },
   callback = function()
-    local line_count = vim.fn.line("$")
+    local line_count = fset.line("$")
     if line_count > 1000 then
       vim.opt_local.foldmethod = "manual"  -- Manual folding for performance
       vim.opt_local.synmaxcol   = 300         -- Reduce syntax processing overhead
@@ -102,16 +105,16 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 -- === Deferred Non-Critical Initialization ===
-vim.api.nvim_create_autocmd("VimEnter", {
+aset.nvim_create_autocmd("VimEnter", {
   callback = function()
     vim.defer_fn(function()
-      vim.o.shadafile = ""
-      vim.o.shada = "!,'100,<50,s10,h"
-      local shada_path = vim.fn.stdpath("data") .. "/shada/main.shada"
-      if vim.fn.filereadable(shada_path) == 1 then
-        pcall(vim.cmd, "silent! rshada")
+      set.shadafile = ""
+      set.shada = "!,'100,<50,s10,h"
+      local shada_path = fset.stdpath("data") .. "/shada/main.shada"
+      if fset.filereadable(shada_path) == 1 then
+        pcall(cset, "silent! rshada")
       end
-      vim.o.clipboard = "unnamedplus"
+      set.clipboard = "unnamedplus"
     end, 100)
   end,
 })
@@ -130,13 +133,13 @@ local mode_map = {
 
 -- Return current mode (fallback safe)
 _G.get_mode = function()
-  local mode = vim.api.nvim_get_mode().mode
-  return mode_map[mode] or ("MODE(" .. vim.fn.escape(mode, ' ') .. ")")
+  local mode = aset.nvim_get_mode().mode
+  return mode_map[mode] or ("MODE(" .. fset.escape(mode, ' ') .. ")")
 end
 
 -- Return current search count
 _G.search_info = function()
-  local ok, s = pcall(vim.fn.searchcount, { maxcount = 0, timeout = 100 })
+  local ok, s = pcall(fset.searchcount, { maxcount = 0, timeout = 100 })
   if ok and s and s.total and s.total > 0 then
     return string.format(" %d/%d", s.current or 0, s.total)
   end
@@ -144,7 +147,7 @@ _G.search_info = function()
 end
 
 -- Set statusline
-vim.o.statusline = table.concat({
+set.statusline = table.concat({
   " %{v:lua.get_mode()} ",        -- Mode indicator
   "%f ",                          -- File path
   "%h%m%r",                       -- Help, Modified, Readonly flags
@@ -160,7 +163,7 @@ vim.o.statusline = table.concat({
 local function clear_search_highlight()
   -- Check if hlsearch is active, if so, clear it
   if vim.v.hlsearch == 1 then
-    vim.cmd("nohlsearch")
+    cset("nohlsearch")
   end
   return "<Esc>"
 end
@@ -179,47 +182,47 @@ vim.opt.fileformats = { "unix" }
 vim.opt.fileformat = "unix"
 
 -- Define dedicated group
-local crlf_group = vim.api.nvim_create_augroup("crlf_guard", { clear = true })
+local crlf_group = aset.nvim_create_augroup("crlf_guard", { clear = true })
 
 -- Pure function to strip carriage returns efficiently
 local function strip_cr()
   -- Early exits for non-editable or untyped buffers
-  if vim.bo.buftype ~= "" or vim.bo.modifiable == false then return end
+  if bset.buftype ~= "" or bset.modifiable == false then return end
 
   -- Efficient regex match using fast scanning
-  if vim.fn.search('\r', 'nw') ~= 0 then
+  if fset.search('\r', 'nw') ~= 0 then
     -- Use native Lua API to edit buffer lines
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local lines = aset.nvim_buf_get_lines(0, 0, -1, false)
     for i, line in ipairs(lines) do
       if line:find('\r') then
         lines[i] = line:gsub('\r', '')
       end
     end
-    vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+    aset.nvim_buf_set_lines(0, 0, -1, false, lines)
 
     -- Enforce Unix format
-    vim.bo.fileformat = "unix"
+    bset.fileformat = "unix"
   end
 end
 
 -- Generic event wrapper with view preservation
 local function with_preserved_view(callback)
   return function()
-    local ok, view = pcall(vim.fn.winsaveview)
+    local ok, view = pcall(fset.winsaveview)
     pcall(callback)
-    if ok then pcall(vim.fn.winrestview, view) end
+    if ok then pcall(fset.winrestview, view) end
   end
 end
 
 -- Register post-read and file-change hook
-vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, {
+aset.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, {
   group = crlf_group,
   pattern = "*",
   callback = with_preserved_view(strip_cr),
 })
 
 -- Strip CR before write
-vim.api.nvim_create_autocmd("BufWritePre", {
+aset.nvim_create_autocmd("BufWritePre", {
   group = crlf_group,
   pattern = "*",
   callback = strip_cr,
@@ -247,7 +250,7 @@ local syntax_cmd = { on = "syntax on", off = "syntax off" }
 
 -- Utility: Apply settings from table
 local setters = {
-  syntax       = function(v) vim.cmd(syntax_cmd[v and "on" or "off"]) end,
+  syntax       = function(v) cset(syntax_cmd[v and "on" or "off"]) end,
   number       = function(v) wset.number = v end,
   relativenumber = function(v) wset.relativenumber = v end,
   cursorline   = function(v) set.cursorline = v end,
@@ -259,9 +262,29 @@ local setters = {
   signcolumn   = function(v) wset.signcolumn = v end,
 }
 
+-- Apply settings to the current window
 local function apply_settings(tbl)
   for k,v in pairs(tbl) do
     setters[k](v)
+  end
+end
+
+-- Apply zen mode settings to all windows
+local function apply_to_all_windows(settings)
+  -- First apply global options
+  for k, v in pairs(settings) do
+    if k ~= "number" and k ~= "relativenumber" and k ~= "signcolumn" then
+      if setters[k] then setters[k](v) end
+    end
+  end
+
+  -- Then apply window-local options to each window
+  for _, win in ipairs(aset.nvim_list_wins()) do
+    aset.nvim_win_call(win, function()
+      if settings.number ~= nil then wset.number = settings.number end
+      if settings.relativenumber ~= nil then wset.relativenumber = settings.relativenumber end
+      if settings.signcolumn ~= nil then wset.signcolumn = settings.signcolumn end
+    end)
   end
 end
 
@@ -283,15 +306,15 @@ local function toggle_zen_mode()
       relativenumber = wset.relativenumber,
       cursorline   = set.cursorline,
       showcmd      = set.showcmd,
-      showmatch      = set.showmatch,
+      showmatch    = set.showmatch,
       laststatus   = set.laststatus,
       cmdheight    = set.cmdheight,
-      showtabline    = set.showtabline,
-      signcolumn     = wset.signcolumn,
+      showtabline  = set.showtabline,
+      signcolumn   = wset.signcolumn,
     }
-    apply_settings(zen_mode.config)
+    apply_to_all_windows(zen_mode.config)
   else
-    apply_settings(zen_mode.saved)
+    apply_to_all_windows(zen_mode.saved)
   end
 end
 
@@ -300,4 +323,20 @@ vim.keymap.set("n", "<Space><Space>", toggle_zen_mode, {
   desc = "Toggle Zen Mode",
   noremap = true,
   silent = true,
+})
+
+-- Create autocommands to maintain zen mode settings for new windows/buffers
+local zen_group = aset.nvim_create_augroup("ZenModeAuto", { clear = true })
+
+-- Apply zen settings when creating new windows
+aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
+  group = zen_group,
+  callback = function()
+    if zen_mode.active then
+      -- Apply zen settings to the current window
+      wset.number = zen_mode.config.number
+      wset.relativenumber = zen_mode.config.relativenumber
+      wset.signcolumn = zen_mode.config.signcolumn
+    end
+  end
 })
