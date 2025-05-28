@@ -241,7 +241,6 @@ local zen_mode = {
     showmatch    = false,
     laststatus   = 0,
     cmdheight    = 0,
-    showtabline  = 0,
     signcolumn   = "no",
   }
 }
@@ -258,7 +257,6 @@ local setters = {
   showmatch    = function(v) set.showmatch = v end,
   laststatus   = function(v) set.laststatus = v end,
   cmdheight    = function(v) set.cmdheight = v end,
-  showtabline  = function(v) set.showtabline = v end,
   signcolumn   = function(v) wset.signcolumn = v end,
 }
 
@@ -309,7 +307,6 @@ local function toggle_zen_mode()
       showmatch    = set.showmatch,
       laststatus   = set.laststatus,
       cmdheight    = set.cmdheight,
-      showtabline  = set.showtabline,
       signcolumn   = wset.signcolumn,
     }
     apply_to_all_windows(zen_mode.config)
