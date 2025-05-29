@@ -229,6 +229,26 @@ aset.nvim_create_autocmd("BufWritePre", {
 })
 
 -- === Zen Mode Configuration ===
+
+local function set_numeric_tabline()
+  vim.o.tabline = '%!v:lua.tabline_numbers()'
+end
+
+function _G.tabline_numbers()
+  local s = ''
+  for i = 1, vim.fn.tabpagenr('$') do
+    local winnr = vim.fn.tabpagewinnr(i)
+    local buflist = vim.fn.tabpagebuflist(i)
+    local bufnr = buflist[winnr]
+    local bufname = vim.fn.bufname(bufnr)
+    local modified = vim.fn.getbufvar(bufnr, '&modified') == 1 and '+' or ''
+    local hl = (i == vim.fn.tabpagenr()) and '%#TabLineSel#' or '%#TabLine#'
+    s = s .. hl .. ' ' .. i .. modified .. ' '
+  end
+  s = s .. '%#TabLineFill#'
+  return s
+end
+
 local zen_mode = {
   active = false,
   saved = {},
@@ -308,10 +328,22 @@ local function toggle_zen_mode()
       laststatus   = set.laststatus,
       cmdheight    = set.cmdheight,
       signcolumn   = wset.signcolumn,
+      tabline = set.tabline,
+      statusline_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
     }
     apply_to_all_windows(zen_mode.config)
+    set_numeric_tabline()
+    aset.nvim_set_hl(0, "StatusLine", {
+      bg = "NONE",  -- transparent background
+      fg = zen_mode.saved.statusline_hl.fg or "#ffffff",
+      bold = zen_mode.saved.statusline_hl.bold or false,
+    })
   else
     apply_to_all_windows(zen_mode.saved)
+    set.tabline = zen_mode.saved.tabline
+    if zen_mode.saved.statusline_hl then
+      aset.nvim_set_hl(0, "StatusLine", zen_mode.saved.statusline_hl)
+    end
   end
 end
 
