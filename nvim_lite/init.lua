@@ -6,11 +6,14 @@ end
 
 -- Shorthand for option tables
 local set   = vim.o   -- global options
+local pset  = vim.opt
 local wset  = vim.wo  -- window options
 local bset  = vim.bo  -- buffer options
 local cset  = vim.cmd -- cmd options
 local fset  = vim.fn
 local aset  = vim.api -- api options
+local kset  = vim.keymap
+local lset  = vim.opt_local
 
 -- === Performance and Resource Management ===
 set.mouse         = ""                -- Disable mouse support; enterprise interfaces may want strict key-based input.
@@ -21,6 +24,11 @@ set.synmaxcol     = 200               -- Limit syntax highlighting width for per
 set.redrawtime    = 1000              -- Max time for full redraw
 set.maxmempattern = 2000              -- Cap pattern search memory
 set.shadafile     = "NONE"            -- Defer persistent state; enterprise setups defer read/write.
+
+-- Tabline highlight groups
+aset.nvim_set_hl(0, 'TabLine', { fg = '#808080', bg = '#1e1e1e' })
+aset.nvim_set_hl(0, 'TabLineSel', { fg = '#ffffff', bg = '#3a3a3a', bold = true })
+aset.nvim_set_hl(0, 'TabLineFill', { fg = 'NONE', bg = '#1e1e1e' })
 
 -- === UI and Editing Experience ===
 set.number        = true              -- Show absolute line numbers
@@ -67,7 +75,7 @@ set.history       = 10000             -- Long command history
 set.undolevels    = 1000              -- Extended undo levels
 
 -- === Arrow Key Blackout (Force Keyboard Discipline) ===
-local set_nop = vim.keymap.set
+local set_nop = kset.set
 -- Enterprise loop to disable arrow keys in Normal and Visual modes:
 for _, mode in ipairs({"n", "v"}) do
   for _, arrow in ipairs({"<Up>", "<Down>", "<Left>", "<Right>"}) do
@@ -95,11 +103,11 @@ aset.nvim_create_autocmd("FileType", {
   callback = function()
     local line_count = fset.line("$")
     if line_count > 1000 then
-      vim.opt_local.foldmethod = "manual"  -- Manual folding for performance
-      vim.opt_local.synmaxcol   = 300         -- Reduce syntax processing overhead
+      lset.foldmethod = "manual"  -- Manual folding for performance
+      lset.synmaxcol   = 300         -- Reduce syntax processing overhead
     else
-      vim.opt_local.foldmethod = "indent"   -- Indentation-based folding in normal cases
-      vim.opt_local.synmaxcol   = 500         -- Slightly relaxed for smaller files
+      lset.foldmethod = "indent"   -- Indentation-based folding in normal cases
+      lset.synmaxcol   = 500         -- Slightly relaxed for smaller files
     end
   end,
 })
@@ -169,7 +177,7 @@ local function clear_search_highlight()
 end
 
 -- Registering the keymap for normal mode
-vim.keymap.set("n", "<Esc>", clear_search_highlight, {
+kset.set("n", "<Esc>", clear_search_highlight, {
   expr = true,
   silent = true,
   noremap = true,
@@ -178,8 +186,8 @@ vim.keymap.set("n", "<Esc>", clear_search_highlight, {
 
 
 -- Enforce Unix-only line endings
-vim.opt.fileformats = { "unix" }
-vim.opt.fileformat = "unix"
+pset.fileformats = { "unix" }
+pset.fileformat = "unix"
 
 -- Define dedicated group
 local crlf_group = aset.nvim_create_augroup("crlf_guard", { clear = true })
@@ -231,21 +239,28 @@ aset.nvim_create_autocmd("BufWritePre", {
 -- === Zen Mode Configuration ===
 
 local function set_numeric_tabline()
-  vim.o.tabline = '%!v:lua.tabline_numbers()'
+  set.tabline = '%!v:lua.tabline_numbers()'
 end
 
 function _G.tabline_numbers()
   local s = ''
-  for i = 1, vim.fn.tabpagenr('$') do
-    local winnr = vim.fn.tabpagewinnr(i)
-    local buflist = vim.fn.tabpagebuflist(i)
+  local current_tab = fset.tabpagenr()
+
+  for i = 1, fset.tabpagenr('$') do
+    local winnr = fset.tabpagewinnr(i)
+    local buflist = fset.tabpagebuflist(i)
     local bufnr = buflist[winnr]
-    local bufname = vim.fn.bufname(bufnr)
-    local modified = vim.fn.getbufvar(bufnr, '&modified') == 1 and '+' or ''
-    local hl = (i == vim.fn.tabpagenr()) and '%#TabLineSel#' or '%#TabLine#'
-    s = s .. hl .. ' ' .. i .. modified .. ' '
+    local bufname = fset.bufname(bufnr)
+    local modified = fset.getbufvar(bufnr, '&modified') == 1 and '+' or ''
+
+    -- Highlight current tab with different colors
+    if i == current_tab then
+      s = s .. '%#TabLineSel# ' .. i .. modified .. ' %#TabLineFill#'
+    else
+      s = s .. '%#TabLine# ' .. i .. modified .. ' %#TabLineFill#'
+    end
   end
-  s = s .. '%#TabLineFill#'
+
   return s
 end
 
@@ -348,7 +363,7 @@ local function toggle_zen_mode()
 end
 
 -- Keymap: Double space to toggle Zen
-vim.keymap.set("n", "<Space><Space>", toggle_zen_mode, {
+kset.set("n", "<Space><Space>", toggle_zen_mode, {
   desc = "Toggle Zen Mode",
   noremap = true,
   silent = true,
