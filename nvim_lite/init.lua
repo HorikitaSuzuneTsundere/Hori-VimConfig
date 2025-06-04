@@ -157,7 +157,7 @@ end
 -- Set statusline
 set.statusline = table.concat({
   " %{v:lua.get_mode()} ",        -- Mode indicator
-  "%f ",                          -- File path
+  "%t ",                          -- File path
   "%h%m%r",                       -- Help, Modified, Readonly flags
   "%=",                           -- Alignment separator
   "Ln %l/%L, Col %c",                -- Line & column
