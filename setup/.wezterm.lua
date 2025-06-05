@@ -2,7 +2,7 @@ local wezterm = require 'wezterm'
 
 return {
   default_prog = {"pwsh", "-NoLogo"},
-  font_size = 11.0,
+  font_size = 10.0,
   colors = {
     background = "#1e1e2e",
     foreground = "#cdd6f4",
