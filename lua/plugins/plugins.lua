@@ -39,6 +39,7 @@ return {
   -- ----------------------------------------------------------------------------
   {
     "folke/snacks.nvim",
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
     description = "UI picker with performance optimizations",
     opts = {
       -- Disable smooth scrolling to reduce animation overhead
