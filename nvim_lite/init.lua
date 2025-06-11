@@ -154,43 +154,13 @@ _G.search_info = function()
   return ""
 end
 
--- Initialize globals
-_G.ct = 0
-_G.st = nil
-
--- Reset counter
-local function reset()
-  _G.ct = 0
-  _G.st = vim.loop.hrtime()
-end
-
--- Calculate WPM
-_G.get_wpm = function()
-  if not _G.st then return 0 end
-  local elapsed = (vim.loop.hrtime() - _G.st) / 1e9 / 60
-  return elapsed > 0 and math.floor((_G.ct / 5) / elapsed) or 0
-end
-
--- Count chars in Insert mode
-aset.nvim_create_autocmd("InsertCharPre", {
-  callback = function()
-    if not _G.st then reset() end
-    _G.ct = _G.ct + 1
-  end
-})
-
--- Auto-reset every 60s
-local tm = vim.loop.new_timer()
-tm:start(0, 60000, vim.schedule_wrap(reset))
-
 -- Set statusline
 set.statusline = table.concat({
   " %{v:lua.get_mode()} ",        -- Mode indicator
-  "%t %y",                        -- File path
+  "%t %y",                          -- File path
   "%h%m%r",                       -- Help, Modified, Readonly flags
   "%=",                           -- Alignment separator
-  "%{v:lua.get_wpm()}WPM ",       -- WPM Counter
-  "Ln %l/%L, Col %c",             -- Line & column
+  "Ln %l/%L, Col %c",                -- Line & column
   "%{v:lua.search_info()}",       -- Inline search result count
   " %P",                          -- Percentage through file
 })
