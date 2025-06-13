@@ -15,6 +15,13 @@ local aset  = vim.api -- api options
 local kset  = vim.keymap
 local lset  = vim.opt_local
 
+-- === Disable matchparen plugin ===
+vim.g.loaded_matchparen = 1
+
+-- === Disable heavy plugins ===
+pset.cursorline = false
+pset.cursorcolumn = false
+
 -- === Performance and Resource Management ===
 set.mouse         = ""                -- Disable mouse support; enterprise interfaces may want strict key-based input.
 set.updatetime    = 100               -- Faster responsiveness
@@ -24,6 +31,12 @@ set.synmaxcol     = 200               -- Limit syntax highlighting width for per
 set.redrawtime    = 1000              -- Max time for full redraw
 set.maxmempattern = 2000              -- Cap pattern search memory
 set.shadafile     = "NONE"            -- Defer persistent state; enterprise setups defer read/write.
+
+-- === Disable LSP Logging ===
+vim.defer_fn(function()
+  vim.env.NVIM_LSP_LOG_FILE = vim.loop.os_uname().sysname == "Windows_NT" and "NUL" or "/dev/null"
+  pcall(vim.lsp.set_log_level, "OFF")
+end, 100)
 
 -- Tabline highlight groups
 aset.nvim_set_hl(0, 'TabLine', { fg = '#808080', bg = '#1e1e1e' })
@@ -48,6 +61,16 @@ set.writebackup   = false             -- Disable redundant writes
 set.timeoutlen    = 300               -- Faster timeout for mapped sequences
 set.ttimeoutlen   = 40                -- Faster keycode timeouts
 set.keymodel      = ""                -- Avoid legacy keymodel semantics
+
+-- === Syntax Performance Tweaks ===
+aset.nvim_create_autocmd("FileType", {
+  group = aset.nvim_create_augroup("SyntaxSyncOptimization", { clear = true }),
+  pattern = { "c", "cpp", "java", "python", "lua", "javascript", "typescript" },
+  callback = function()
+    cset("syntax sync minlines=200")
+    cset("syntax sync maxlines=500")
+  end
+})
 
 -- === Indentation and Formatting ===
 set.expandtab     = true              -- Use spaces over tabs
@@ -99,15 +122,21 @@ aset.nvim_create_autocmd("BufWritePre", {
 -- === Adaptive Optimization for Large Files ===
 aset.nvim_create_autocmd("FileType", {
   group = aset.nvim_create_augroup("EnterpriseLargeFileOpts", { clear = true }),
-  pattern = { "json", "yaml", "markdown" },
+  pattern = { "json", "yaml", "markdown", "text", "plaintex" },
   callback = function()
     local line_count = fset.line("$")
     if line_count > 1000 then
-      lset.foldmethod = "manual"  -- Manual folding for performance
-      lset.synmaxcol   = 300         -- Reduce syntax processing overhead
+      lset.foldmethod   = "manual"
+      lset.synmaxcol    = 300
+      lset.wrap         = true       -- Enable wrap for readability
+      lset.linebreak    = true       -- Break at word boundaries
+      lset.breakindent  = true       -- Preserve indentation
     else
-      lset.foldmethod = "indent"   -- Indentation-based folding in normal cases
-      lset.synmaxcol   = 500         -- Slightly relaxed for smaller files
+      lset.foldmethod   = "indent"
+      lset.synmaxcol    = 500
+      lset.wrap         = false      -- Maintain coding default
+      lset.linebreak    = false
+      lset.breakindent  = false
     end
   end,
 })
@@ -271,9 +300,7 @@ local zen_mode = {
     syntax       = false,
     number       = false,
     relativenumber = false,
-    cursorline   = false,
     showcmd      = false,
-    showmatch    = false,
     laststatus   = 0,
     cmdheight    = 0,
     signcolumn   = "no",
@@ -287,9 +314,7 @@ local setters = {
   syntax       = function(v) cset(syntax_cmd[v and "on" or "off"]) end,
   number       = function(v) wset.number = v end,
   relativenumber = function(v) wset.relativenumber = v end,
-  cursorline   = function(v) set.cursorline = v end,
   showcmd      = function(v) set.showcmd = v end,
-  showmatch    = function(v) set.showmatch = v end,
   laststatus   = function(v) set.laststatus = v end,
   cmdheight    = function(v) set.cmdheight = v end,
   signcolumn   = function(v) wset.signcolumn = v end,
@@ -337,9 +362,7 @@ local function toggle_zen_mode()
       syntax       = set.syntax ~= "off",
       number       = wset.number,
       relativenumber = wset.relativenumber,
-      cursorline   = set.cursorline,
       showcmd      = set.showcmd,
-      showmatch    = set.showmatch,
       laststatus   = set.laststatus,
       cmdheight    = set.cmdheight,
       signcolumn   = wset.signcolumn,
