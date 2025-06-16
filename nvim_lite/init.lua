@@ -45,7 +45,7 @@ aset.nvim_set_hl(0, 'TabLineFill', { fg = 'NONE', bg = '#1e1e1e' })
 
 -- === UI and Editing Experience ===
 set.number        = true              -- Show absolute line numbers
-wset.relativenumber = true           -- And relative line numbers for context
+wset.relativenumber = false           -- Disabled relative line numbers
 set.scrolloff     = 10                -- Keep a buffer of lines when scrolling
 set.sidescrolloff = 8                 -- Horizontal padding
 wset.wrap         = false             -- Disable wrapping (preferred in coding environments)
@@ -299,7 +299,6 @@ local zen_mode = {
   config = {
     syntax       = false,
     number       = false,
-    relativenumber = false,
     showcmd      = false,
     laststatus   = 0,
     cmdheight    = 0,
@@ -313,7 +312,6 @@ local syntax_cmd = { on = "syntax on", off = "syntax off" }
 local setters = {
   syntax       = function(v) cset(syntax_cmd[v and "on" or "off"]) end,
   number       = function(v) wset.number = v end,
-  relativenumber = function(v) wset.relativenumber = v end,
   showcmd      = function(v) set.showcmd = v end,
   laststatus   = function(v) set.laststatus = v end,
   cmdheight    = function(v) set.cmdheight = v end,
@@ -331,7 +329,7 @@ end
 local function apply_to_all_windows(settings)
   -- First apply global options
   for k, v in pairs(settings) do
-    if k ~= "number" and k ~= "relativenumber" and k ~= "signcolumn" then
+    if k ~= "number" and k ~= "signcolumn" then
       if setters[k] then setters[k](v) end
     end
   end
@@ -340,7 +338,6 @@ local function apply_to_all_windows(settings)
   for _, win in ipairs(aset.nvim_list_wins()) do
     aset.nvim_win_call(win, function()
       if settings.number ~= nil then wset.number = settings.number end
-      if settings.relativenumber ~= nil then wset.relativenumber = settings.relativenumber end
       if settings.signcolumn ~= nil then wset.signcolumn = settings.signcolumn end
     end)
   end
@@ -361,7 +358,6 @@ local function toggle_zen_mode()
     zen_mode.saved = {
       syntax       = set.syntax ~= "off",
       number       = wset.number,
-      relativenumber = wset.relativenumber,
       showcmd      = set.showcmd,
       laststatus   = set.laststatus,
       cmdheight    = set.cmdheight,
@@ -402,7 +398,6 @@ aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
     if zen_mode.active then
       -- Apply zen settings to the current window
       wset.number = zen_mode.config.number
-      wset.relativenumber = zen_mode.config.relativenumber
       wset.signcolumn = zen_mode.config.signcolumn
     end
   end
