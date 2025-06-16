@@ -51,6 +51,7 @@ set.sidescrolloff = 8                 -- Horizontal padding
 wset.wrap         = false             -- Disable wrapping (preferred in coding environments)
 wset.linebreak    = false             -- No automatic line breaks
 wset.breakindent  = false             -- No break indent
+pset.termguicolors = true             -- enabling richer themes
 
 set.showmode      = false             -- Status bar for mode can be handled by enterprise statusline solutions
 set.undofile      = true              -- Enable persistent undo for large datasets
