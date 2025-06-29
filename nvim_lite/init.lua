@@ -23,14 +23,14 @@ pset.cursorline = false
 pset.cursorcolumn = false
 
 -- === Performance and Resource Management ===
-set.mouse         = ""                -- Disable mouse support; enterprise interfaces may want strict key-based input.
+set.mouse         = ""                -- Disable mouse support
 set.updatetime    = 100               -- Faster responsiveness
 set.lazyredraw    = true              -- Only redraw when needed
 set.ttyfast       = true              -- Optimization for fast terminal redraw
 set.synmaxcol     = 200               -- Limit syntax highlighting width for performance
 set.redrawtime    = 1000              -- Max time for full redraw
 set.maxmempattern = 2000              -- Cap pattern search memory
-set.shadafile     = "NONE"            -- Defer persistent state; enterprise setups defer read/write.
+set.shadafile     = "NONE"            -- Defer persistent state
 
 -- === Disable LSP Logging ===
 vim.defer_fn(function()
@@ -53,10 +53,10 @@ wset.linebreak    = false             -- No automatic line breaks
 wset.breakindent  = false             -- No break indent
 pset.termguicolors = true             -- enabling richer themes
 
-set.showmode      = false             -- Status bar for mode can be handled by enterprise statusline solutions
+set.showmode      = false
 set.undofile      = true              -- Enable persistent undo for large datasets
 set.swapfile      = false             -- Avoid swap files in streamlined setups
-set.backup        = false             -- Enterprise deployments handle version control separately
+set.backup        = false
 set.writebackup   = false             -- Disable redundant writes
 
 set.timeoutlen    = 300               -- Faster timeout for mapped sequences
@@ -100,7 +100,7 @@ set.undolevels    = 1000              -- Extended undo levels
 
 -- === Arrow Key Blackout (Force Keyboard Discipline) ===
 local set_nop = kset.set
--- Enterprise loop to disable arrow keys in Normal and Visual modes:
+-- Loop to disable arrow keys in Normal and Visual modes:
 for _, mode in ipairs({"n", "v"}) do
   for _, arrow in ipairs({"<Up>", "<Down>", "<Left>", "<Right>"}) do
     set_nop(mode, arrow, "<Nop>", { desc = "Arrow Disabled" })
@@ -109,7 +109,7 @@ end
 
 -- === Whitespace Cleaner (Pre-Save Hook) ===
 aset.nvim_create_autocmd("BufWritePre", {
-  group = aset.nvim_create_augroup("EnterpriseTrimWhitespace", { clear = true }),
+  group = aset.nvim_create_augroup("TrimWhitespace", { clear = true }),
   pattern = { "*.java", "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
   callback = function()
     if bset.modified then
@@ -122,7 +122,7 @@ aset.nvim_create_autocmd("BufWritePre", {
 
 -- === Adaptive Optimization for Large Files ===
 aset.nvim_create_autocmd("FileType", {
-  group = aset.nvim_create_augroup("EnterpriseLargeFileOpts", { clear = true }),
+  group = aset.nvim_create_augroup("LargeFileOpts", { clear = true }),
   pattern = { "json", "yaml", "markdown", "text", "plaintex" },
   callback = function()
     local line_count = fset.line("$")
@@ -403,3 +403,127 @@ aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
     end
   end
 })
+
+local M = {}
+
+-- === CONFIGURATION ===
+local DWELL_THRESHOLD_MS = 1000
+local MAX_JUMP_SIZE = 32
+
+-- === INTERNAL STATE ===
+local backward_ring = {}
+local forward_ring = {}
+local ring_index = 1
+local ring_size = 0
+
+local last_pos = nil
+local last_time = 0
+
+-- === LOW-LEVEL HELPERS ===
+local function now_ms()
+  return vim.loop.hrtime() / 1e6
+end
+
+local function get_cursor()
+  return {
+    bufnr = aset.nvim_get_current_buf(),
+    pos = aset.nvim_win_get_cursor(0) -- {line, col}
+  }
+end
+
+local function same_position(a, b)
+  return a and b and a.bufnr == b.bufnr
+    and a.pos[1] == b.pos[1]
+    and a.pos[2] == b.pos[2]
+end
+
+local function clone_pos(p)
+  return { bufnr = p.bufnr, pos = { p.pos[1], p.pos[2] } }
+end
+
+local function restore_cursor(entry)
+  if not entry then return end
+  if aset.nvim_buf_is_loaded(entry.bufnr) then
+    aset.nvim_set_current_buf(entry.bufnr)
+    aset.nvim_win_set_cursor(0, entry.pos)
+  end
+end
+
+-- === RING BUFFER ===
+local function push_jump(ring, entry)
+  if #ring >= MAX_JUMP_SIZE then
+    table.remove(ring, 1)
+  end
+  table.insert(ring, entry)
+end
+
+-- === CORE TRACKER ===
+function M.track_position()
+  local current_time = now_ms()
+  local current_pos = get_cursor()
+
+  if last_pos and not same_position(last_pos, current_pos) then
+    local time_diff = current_time - last_time
+    if time_diff >= DWELL_THRESHOLD_MS then
+      push_jump(backward_ring, clone_pos(last_pos))
+      -- Clear forward stack when new path is taken
+      forward_ring = {}
+    end
+  end
+
+  last_pos = current_pos
+  last_time = current_time
+end
+
+-- === USER FUNCTIONS ===
+function M.jump_back()
+  local entry = table.remove(backward_ring)
+  if entry then
+    push_jump(forward_ring, clone_pos(get_cursor()))
+    restore_cursor(entry)
+  else
+    vim.notify("No older meaningful jump", vim.log.levels.INFO)
+  end
+end
+
+function M.jump_forward()
+  local entry = table.remove(forward_ring)
+  if entry then
+    push_jump(backward_ring, clone_pos(get_cursor()))
+    restore_cursor(entry)
+  else
+    vim.notify("No newer meaningful jump", vim.log.levels.INFO)
+  end
+end
+
+-- === MAPPINGS ===
+function M.setup_keymaps()
+  kset.set("n", "<C-o>", M.jump_back, {
+    desc = "Jump Back",
+    noremap = true, silent = true
+  })
+
+  kset.set("n", "<C-i>", M.jump_forward, {
+    desc = "Jump Forward",
+    noremap = true, silent = true
+  })
+end
+
+-- === AUTO TRACKING ===
+function M.enable_autotracking()
+  local group = aset.nvim_create_augroup("JumpTracking", { clear = true })
+  aset.nvim_create_autocmd({ "CursorMoved", "BufLeave" }, {
+    group = group,
+    callback = function()
+      pcall(M.track_position)
+    end,
+  })
+end
+
+-- === MAIN SETUP ===
+function M.setup()
+  M.enable_autotracking()
+  M.setup_keymaps()
+end
+
+M.setup()
