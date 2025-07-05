@@ -247,14 +247,13 @@ function _G.tabline_numbers()
     local buflist = fset.tabpagebuflist(i)
     local bufnr = buflist[winnr]
     local bufname = fset.bufname(bufnr)
-    local filename = fset.fnamemodify(rawname, ":t")
     local modified = fset.getbufvar(bufnr, '&modified') == 1 and '+' or ''
 
     -- Highlight current tab with different colors
     if i == current_tab then
-      s = s .. '%#TabLineSel# ' .. i .. ':' .. filename .. modified .. ' %#TabLineFill#'
+      s = s .. '%#TabLineSel# ' .. i .. modified .. ' %#TabLineFill#'
     else
-      s = s .. '%#TabLine# ' .. i .. ':' .. filename .. modified .. ' %#TabLineFill#'
+      s = s .. '%#TabLine# ' .. i .. modified .. ' %#TabLineFill#'
     end
   end
 
