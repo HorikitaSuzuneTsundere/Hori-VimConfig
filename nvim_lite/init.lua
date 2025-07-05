@@ -14,6 +14,12 @@ local fset  = vim.fn
 local aset  = vim.api -- api options
 local kset  = vim.keymap
 local lset  = vim.opt_local
+local vset  = vim.v
+
+local jumpstate = {
+  char = nil,
+  dir = nil,
+}
 
 -- === Disable matchparen plugin ===
 vim.g.loaded_matchparen = 1
@@ -198,16 +204,16 @@ set.statusline = table.concat({
 -- === Fast Clear Highlight on <Esc> ===
 -- Local, reusable function (non-capturing, no closure, no allocs)
 local function clear_hlsearch_if_active()
-  if vim.v.hlsearch ~= 1 then return "<Esc>" end
-  vim.cmd("nohlsearch")  -- no pure API for this yet
+  if vset.hlsearch ~= 1 then return "<Esc>" end
+  cset("nohlsearch")  -- no pure API for this yet
   return "<Esc>"
 end
 
 -- Insert mode: exit Insert, then clear highlight (deferred)
-vim.keymap.set("i", "<Esc>", function()
+kset.set("i", "<Esc>", function()
   vim.schedule(function()
-    if vim.v.hlsearch == 1 then
-      vim.cmd("nohlsearch")
+    if vset.hlsearch == 1 then
+      cset("nohlsearch")
     end
   end)
   return "<Esc>"
@@ -219,7 +225,7 @@ end, {
 })
 
 -- Normal mode: inline fast-path with guard
-vim.keymap.set("n", "<Esc>", clear_hlsearch_if_active, {
+kset.set("n", "<Esc>", clear_hlsearch_if_active, {
   expr = true,
   silent = true,
   noremap = true,
@@ -363,11 +369,6 @@ aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
     end
   end
 })
-
-local jumpstate = {
-  char = nil,
-  dir = nil,
-}
 
 -- Minimal function to jump to the first match of `char`
 -- from current cursor, across visible screen lines.
