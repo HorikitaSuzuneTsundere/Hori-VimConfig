@@ -195,23 +195,35 @@ set.statusline = table.concat({
   " %P",                          -- Percentage through file
 })
 
--- === ESC Behavior Enhancement (No Highlight Search) ===
--- Function to clear search highlight when pressing Esc
-
-local function clear_search_highlight()
-  -- Check if hlsearch is active, if so, clear it
-  if vim.v.hlsearch == 1 then
-    cset("nohlsearch")
-  end
+-- === Fast Clear Highlight on <Esc> ===
+-- Local, reusable function (non-capturing, no closure, no allocs)
+local function clear_hlsearch_if_active()
+  if vim.v.hlsearch ~= 1 then return "<Esc>" end
+  vim.cmd("nohlsearch")  -- no pure API for this yet
   return "<Esc>"
 end
 
--- Registering the keymap for normal mode
-kset.set("n", "<Esc>", clear_search_highlight, {
+-- Insert mode: exit Insert, then clear highlight (deferred)
+vim.keymap.set("i", "<Esc>", function()
+  vim.schedule(function()
+    if vim.v.hlsearch == 1 then
+      vim.cmd("nohlsearch")
+    end
+  end)
+  return "<Esc>"
+end, {
   expr = true,
   silent = true,
   noremap = true,
-  desc = "Clear search highlight on Esc"
+  desc = "Fast clear hlsearch on <Esc> from Insert"
+})
+
+-- Normal mode: inline fast-path with guard
+vim.keymap.set("n", "<Esc>", clear_hlsearch_if_active, {
+  expr = true,
+  silent = true,
+  noremap = true,
+  desc = "Fast clear hlsearch on <Esc> from Normal"
 })
 
 -- === Zen Mode Configuration ===
@@ -351,3 +363,92 @@ aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
     end
   end
 })
+
+local jumpstate = {
+  char = nil,
+  dir = nil,
+}
+
+-- Minimal function to jump to the first match of `char`
+-- from current cursor, across visible screen lines.
+local function jump_to_char(char, dir, is_repeat)
+  if #char ~= 1 then return end
+
+  local win = aset.nvim_get_current_win()
+  local buf = aset.nvim_get_current_buf()
+  local cur = aset.nvim_win_get_cursor(win)
+  local row, col = cur[1], cur[2] + 1 -- Lua 1-based col
+
+  local top, bot = fset.line("w0"), fset.line("w$")
+  local step = dir == "forward" and 1 or -1
+  local start = row
+  local stop  = dir == "forward" and bot or top
+
+  local scol, ecol, line, len
+  for r = start, stop, step do
+    line = aset.nvim_buf_get_lines(buf, r - 1, r, false)[1]
+    if line then
+      len = #line
+
+      if r == row then
+        if dir == "forward" then
+          scol = is_repeat and (col + 1) or (col + 1)
+          if scol > len then goto continue end
+          ecol = len
+        else
+          scol = is_repeat and (col - 1) or (col - 1)
+          if scol < 1 then goto continue end
+          ecol = 1
+        end
+      else
+        scol = (dir == "forward") and 1 or len
+        ecol = (dir == "forward") and len or 1
+      end
+
+      local delta = scol <= ecol and 1 or -1
+      local byte = string.byte(char)
+
+      for c = scol, ecol, delta do
+        if string.byte(line, c) == byte then
+          aset.nvim_win_set_cursor(win, { r, c - 1 })
+          jumpstate.char = char
+          jumpstate.dir  = dir
+          return true
+        end
+      end
+    end
+    ::continue::
+  end
+
+  return false
+end
+
+-- Trigger jump manually
+local function initiate_jump(dir)
+  local ok, char = pcall(fset.getcharstr)
+  if not ok or #char ~= 1 then return end
+  jump_to_char(char, dir, false)
+end
+
+-- Repeat last jump
+local function repeat_jump(reverse)
+  local char, dir = jumpstate.char, jumpstate.dir
+  if not char or not dir then return end
+  if reverse then
+    dir = (dir == "forward") and "backward" or "forward"
+  end
+  jump_to_char(char, dir, true)
+end
+
+-- === Keybindings (Fast-path config, no plugins) ===
+kset.set("n", "s", function() initiate_jump("forward") end,
+  { noremap = true, desc = "Jump forward to char" })
+
+kset.set("n", "S", function() initiate_jump("backward") end,
+  { noremap = true, desc = "Jump backward to char" })
+
+kset.set("n", ";", function() repeat_jump(false) end,
+  { noremap = true, desc = "Repeat forward jump" })
+
+kset.set("n", ",", function() repeat_jump(true) end,
+  { noremap = true, desc = "Repeat backward jump" })
