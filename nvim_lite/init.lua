@@ -234,44 +234,64 @@ kset.set("n", "<Esc>", clear_hlsearch_if_active, {
 
 -- === Zen Mode Configuration ===
 
-local function set_numeric_tabline()
-  set.tabline = '%!v:lua.tabline_numbers()'
-end
+-- === Zen Mode State ===
+_G.zen_mode = {
+  active = false,
+  saved  = {},
+  config = {
+    syntax     = false,
+    number     = false,
+    showcmd    = false,
+    laststatus = 0,
+    cmdheight  = 0,
+    signcolumn = "no",
+  },
+}
 
 function _G.tabline_numbers()
-  local s = ''
+  local s           = ''
   local current_tab = fset.tabpagenr()
+  local total_tabs  = fset.tabpagenr('$')
+  local zen         = _G.zen_mode.active
 
-  for i = 1, fset.tabpagenr('$') do
-    local winnr = fset.tabpagewinnr(i)
-    local buflist = fset.tabpagebuflist(i)
-    local bufnr = buflist[winnr]
-    local bufname = fset.bufname(bufnr)
-    local modified = fset.getbufvar(bufnr, '&modified') == 1 and '+' or ''
+  for i = 1, total_tabs do
+    local label = tostring(i)
 
-    -- Highlight current tab with different colors
-    if i == current_tab then
-      s = s .. '%#TabLineSel# ' .. i .. modified .. ' %#TabLineFill#'
-    else
-      s = s .. '%#TabLine# ' .. i .. modified .. ' %#TabLineFill#'
+    -- Safely fetch window & buffer list
+    local ok_w, winnr  = pcall(fset.tabpagewinnr, i)
+    local ok_b, buflst = pcall(fset.tabpagebuflist, i)
+    if ok_w and ok_b and winnr and buflst then
+      local bufnr = buflst[winnr] or 0
+      if fset.bufexists(bufnr) == 1 then
+        -- modified flag
+        local mod = ''
+        local ok_m, is_m = pcall(fset.getbufvar, bufnr, '&modified')
+        if ok_m and is_m == 1 then mod = '+' end
+
+        if not zen then
+          local raw  = fset.bufname(bufnr) or ''
+          local name = fset.fnamemodify(raw, ':t')
+          if name == '' then name = '[No Name]' end
+          label = label .. ':' .. name .. mod
+        else
+          -- Zen mode: number only (+ if modified)
+          label = label .. mod
+        end
+      end
     end
+
+    -- highlight, then fill
+    local hl = (i == current_tab)
+             and '%#TabLineSel#'
+             or '%#TabLine#'
+    s = s .. string.format('%s %s %%#TabLineFill#', hl, label)
   end
 
   return s
 end
 
-local zen_mode = {
-  active = false,
-  saved = {},
-  config = {
-    syntax       = false,
-    number       = false,
-    showcmd      = false,
-    laststatus   = 0,
-    cmdheight    = 0,
-    signcolumn   = "no",
-  }
-}
+-- Always use our Lua tabline renderer:
+set.tabline = '%!v:lua.tabline_numbers()'
 
 local syntax_cmd = { on = "syntax on", off = "syntax off" }
 
@@ -312,40 +332,43 @@ end
 
 -- Zen toggle handler
 local function toggle_zen_mode()
-  if zen_mode._busy then return end
-  zen_mode._busy = true
-  vim.schedule(function()
-    zen_mode._busy = false
-  end)
+  if _G.zen_mode._busy then return end
+  _G.zen_mode._busy = true
+  vim.schedule(function() _G.zen_mode._busy = false end)
 
-  zen_mode.active = not zen_mode.active
+  -- flip state
+  _G.zen_mode.active = not _G.zen_mode.active
 
-  if zen_mode.active then
-    -- Save current state for full reversibility
-    zen_mode.saved = {
-      syntax       = set.syntax ~= "off",
-      number       = wset.number,
-      showcmd      = set.showcmd,
-      laststatus   = set.laststatus,
-      cmdheight    = set.cmdheight,
-      signcolumn   = wset.signcolumn,
-      tabline = set.tabline,
-      statusline_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
+  -- apply ui settings
+  if _G.zen_mode.active then
+    -- save only the things you actually want to revert...
+    _G.zen_mode.saved = {
+      syntax     = set.syntax ~= "off",
+      number     = wset.number,
+      showcmd    = set.showcmd,
+      laststatus = set.laststatus,
+      cmdheight  = set.cmdheight,
+      signcolumn = wset.signcolumn,
+      status_hl  = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
     }
-    apply_to_all_windows(zen_mode.config)
-    set_numeric_tabline()
+    apply_to_all_windows(_G.zen_mode.config)
+    -- no tabline touch here
     aset.nvim_set_hl(0, "StatusLine", {
-      bg = "NONE",  -- transparent background
-      fg = zen_mode.saved.statusline_hl.fg or "#ffffff",
-      bold = zen_mode.saved.statusline_hl.bold or false,
+      bg   = "NONE",
+      fg   = _G.zen_mode.saved.status_hl.fg or "#ffffff",
+      bold = _G.zen_mode.saved.status_hl.bold or false,
     })
   else
-    apply_to_all_windows(zen_mode.saved)
-    set.tabline = zen_mode.saved.tabline
-    if zen_mode.saved.statusline_hl then
-      aset.nvim_set_hl(0, "StatusLine", zen_mode.saved.statusline_hl)
+    -- restore exactly what you saved
+    apply_to_all_windows(_G.zen_mode.saved)
+    if _G.zen_mode.saved.status_hl then
+      aset.nvim_set_hl(0, "StatusLine", _G.zen_mode.saved.status_hl)
     end
+    -- again, no tabline touch
   end
+
+  -- finally: force a redraw so tabline will re-evaluate
+  cset('redrawtabline')
 end
 
 -- Keymap: Double space to toggle Zen
