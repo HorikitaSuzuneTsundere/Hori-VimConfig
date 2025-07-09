@@ -15,7 +15,6 @@ local aset  = vim.api -- api options
 local kset  = vim.keymap
 local lset  = vim.opt_local
 local vset  = vim.v
-local gset = vim.g
 
 local jumpstate = {
   char = nil,
@@ -23,7 +22,7 @@ local jumpstate = {
 }
 
 -- === Disable matchparen plugin ===
-gset.loaded_matchparen = 1
+vim.g.loaded_matchparen = 1
 
 -- === Disable heavy plugins ===
 pset.cursorline = false
@@ -114,38 +113,17 @@ for _, mode in ipairs({"n", "v"}) do
   end
 end
 
--- Fast Lua-native trailing whitespace cleaner
-local function trim_trailing_whitespace()
-  if not bset.modified then return end
-
-  local line_count = fset.line("$")
-  if line_count >= 1000 then return end -- short-circuit large files
-
-  local bufnr = aset.nvim_get_current_buf()
-  local changed = false
-  local lines = aset.nvim_buf_get_lines(bufnr, 0, line_count, false)
-
-  for i = 1, #lines do
-    local orig = lines[i]
-    local trimmed = orig:match("^(.-)%s*$")
-    if orig ~= trimmed then
-      lines[i] = trimmed
-      changed = true
-    end
-  end
-
-  if changed then
-    local view = fset.winsaveview()
-    aset.nvim_buf_set_lines(bufnr, 0, line_count, false, lines)
-    fset.winrestview(view)
-  end
-end
-
 -- === Whitespace Cleaner (Pre-Save Hook) ===
 aset.nvim_create_autocmd("BufWritePre", {
   group = aset.nvim_create_augroup("TrimWhitespace", { clear = true }),
-  pattern = { "*.lua", "*.c", "*.cpp", "*.py", "*.js", "*.java" },
-  callback = trim_trailing_whitespace
+  pattern = { "*.java", "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
+  callback = function()
+    if bset.modified then
+      local view = fset.winsaveview()  -- Save current window state
+      cset("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
+      fset.winrestview(view)  -- Restore window state
+    end
+  end,
 })
 
 -- === Adaptive Optimization for Large Files ===
@@ -185,81 +163,43 @@ aset.nvim_create_autocmd("VimEnter", {
   end,
 })
 
--- === Cached State for Statusline ===
-
-local cached_mode   = "NORMAL"
-local cached_search = ""
-
--- === Fast Mode Map Table ===
+-- === Integrated Statusline with Inline Search Count ===
+-- Mode map to human-readable form
 local mode_map = {
-  n  = "NORMAL",      no  = "N·OP",      nov = "N·OP",
-  i  = "INSERT",      ic  = "INS·COMP",  ix  = "INS·X",
-  v  = "VISUAL",      V   = "V·LINE",    [""] = "V·BLOCK",
-  c  = "COMMAND",     cv  = "VIM·EX",    ce  = "EX",
-  r  = "REPLACE",     R   = "REPLACE",   Rx  = "REPL·X",
-  s  = "SELECT",      S   = "S·LINE",    [""] = "S·BLOCK",
-  t  = "TERMINAL"
+  n = "NORMAL",      no = "N·OP",         nov = "N·OP",
+  i = "INSERT",      ic = "INS·COMP",     ix = "INS·X",
+  v = "VISUAL",      V = "V·LINE",        [""] = "V·BLOCK",
+  c = "COMMAND",     cv = "VIM·EX",       ce = "EX",
+  r = "REPLACE",     R = "REPLACE",       Rx = "REPL·X",
+  s = "SELECT",      S = "S·LINE",        [""] = "S·BLOCK",
+  t = "TERMINAL"
 }
 
--- === Background Updater: Mode and Search Count ===
+-- Return current mode (fallback safe)
+_G.get_mode = function()
+  local mode = aset.nvim_get_mode().mode
+  return mode_map[mode] or ("MODE(" .. fset.escape(mode, ' ') .. ")")
+end
 
-local function update_mode()
-  local ok, result = pcall(aset.nvim_get_mode)
-  if ok and result and result.mode then
-    cached_mode = mode_map[result.mode] or "MODE(" .. result.mode .. ")"
+-- Return current search count
+_G.search_info = function()
+  local ok, s = pcall(fset.searchcount, { maxcount = 0, timeout = 100 })
+  if ok and s and s.total and s.total > 0 then
+    return string.format(" %d/%d", s.current or 0, s.total)
   end
+  return ""
 end
 
-local function update_search()
-  local ok, result = pcall(fset.searchcount, { maxcount = 0, timeout = 30 })
-  if ok and result and result.total and result.total > 0 then
-    local current = result.current or 0
-    cached_search = string.format(" %d/%d", current, result.total)
-  else
-    cached_search = ""
-  end
-end
-
--- === Debounced Update Trigger ===
-
-local function schedule_statusline_update()
-  vim.defer_fn(function()
-    update_mode()
-    update_search()
-  end, 0)
-end
-
--- === Auto-trigger on UI-relevant Events ===
-
-aset.nvim_create_autocmd({ "CursorMoved", "InsertEnter", "InsertLeave", "CmdlineLeave" }, {
-  group = aset.nvim_create_augroup("StatuslineUpdate", { clear = true }),
-  callback = schedule_statusline_update
-})
-
--- === Static Fast Statusline (No `v:lua`) ===
-
+-- Set statusline
 set.statusline = table.concat({
-  " %{g:sl_cached_mode} ",
-  "%t %y",
-  "%h%m%r",
-  "%=",
-  "Ln %l/%L, Col %c",
-  "%{g:sl_cached_search}",
-  " %P",
+  " %{v:lua.get_mode()} ",        -- Mode indicator
+  "%t %y",                          -- File path
+  "%h%m%r",                       -- Help, Modified, Readonly flags
+  "%=",                           -- Alignment separator
+  "Ln %l/%L, Col %c",                -- Line & column
+  "%{v:lua.search_info()}",       -- Inline search result count
+  " %P",                          -- Percentage through file
 })
-
--- === Global Vars as Vimscript Bridge ===
-
-gset.sl_cached_mode   = cached_mode
-gset.sl_cached_search = cached_search
-
--- === Background Timer to Sync Cached State into Vim Globals ===
-
--- Avoid per-event calls to `vim.g` setter, use this to sync periodically
-fset.timer_start(100, function()
-  gset.sl_cached_mode   = cached_mode
-  gset.sl_cached_search = cached_search
-end, { ["repeat"] = -1 })
 
 -- === Fast Clear Highlight on <Esc> ===
 -- Local, reusable function (non-capturing, no closure, no allocs)
@@ -381,26 +321,12 @@ local function apply_to_all_windows(settings)
     end
   end
 
-  -- Reuse this up to a safe static bound
-  local MAX_WIN = 64
-  local wins = aset.nvim_list_wins()
-
-  -- Pre-check if either setting is needed
-  local apply_number     = settings.number     ~= nil
-  local apply_signcolumn = settings.signcolumn ~= nil
-  if not apply_number and not apply_signcolumn then return end
-
-  -- Fast-guard and early loop exit
-  local win_count = #wins > MAX_WIN and MAX_WIN or #wins
-  for i = 1, win_count do
-    local win = wins[i]
-    -- Set window-local opts directly via API to avoid win_call overhead
-    if apply_number then
-      pcall(aset.nvim_set_option_value, "number", settings.number, { win = win })
-    end
-    if apply_signcolumn then
-      pcall(aset.nvim_set_option_value, "signcolumn", settings.signcolumn, { win = win })
-    end
+  -- Then apply window-local options to each window
+  for _, win in ipairs(aset.nvim_list_wins()) do
+    aset.nvim_win_call(win, function()
+      if settings.number ~= nil then wset.number = settings.number end
+      if settings.signcolumn ~= nil then wset.signcolumn = settings.signcolumn end
+    end)
   end
 end
 
