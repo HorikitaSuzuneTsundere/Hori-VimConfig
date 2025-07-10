@@ -113,17 +113,38 @@ for _, mode in ipairs({"n", "v"}) do
   end
 end
 
+-- Fast Lua-native trailing whitespace cleaner
+local function trim_trailing_whitespace()
+  if not bset.modified then return end
+
+  local line_count = fset.line("$")
+  if line_count >= 1000 then return end -- short-circuit large files
+
+  local bufnr = aset.nvim_get_current_buf()
+  local changed = false
+  local lines = aset.nvim_buf_get_lines(bufnr, 0, line_count, false)
+
+  for i = 1, #lines do
+    local orig = lines[i]
+    local trimmed = orig:match("^(.-)%s*$")
+    if orig ~= trimmed then
+      lines[i] = trimmed
+      changed = true
+    end
+  end
+
+  if changed then
+    local view = fset.winsaveview()
+    aset.nvim_buf_set_lines(bufnr, 0, line_count, false, lines)
+    fset.winrestview(view)
+  end
+end
+
 -- === Whitespace Cleaner (Pre-Save Hook) ===
 aset.nvim_create_autocmd("BufWritePre", {
   group = aset.nvim_create_augroup("TrimWhitespace", { clear = true }),
-  pattern = { "*.java", "*.js", "*.c", "*.cpp", "*.py", "*.lua" },
-  callback = function()
-    if bset.modified then
-      local view = fset.winsaveview()  -- Save current window state
-      cset("silent! keepjumps %s/\\s\\+$//e")  -- Remove trailing whitespace
-      fset.winrestview(view)  -- Restore window state
-    end
-  end,
+  pattern = { "*.lua", "*.c", "*.cpp", "*.py", "*.js", "*.java" },
+  callback = trim_trailing_whitespace
 })
 
 -- === Adaptive Optimization for Large Files ===
