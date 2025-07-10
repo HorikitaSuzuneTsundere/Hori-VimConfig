@@ -8,18 +8,12 @@ end
 local set   = vim.o   -- global options
 local pset  = vim.opt
 local wset  = vim.wo  -- window options
-local bset  = vim.bo  -- buffer options
 local cset  = vim.cmd -- cmd options
 local fset  = vim.fn
 local aset  = vim.api -- api options
 local kset  = vim.keymap
 local lset  = vim.opt_local
 local vset  = vim.v
-
-local jumpstate = {
-  char = nil,
-  dir = nil,
-}
 
 -- === Disable matchparen plugin ===
 vim.g.loaded_matchparen = 1
@@ -115,7 +109,7 @@ end
 
 -- Fast Lua-native trailing whitespace cleaner
 local function trim_trailing_whitespace()
-  if not bset.modified then return end
+  if not vim.bo.modified then return end
 
   local line_count = fset.line("$")
   if line_count >= 1000 then return end -- short-circuit large files
