@@ -14,6 +14,7 @@ local aset  = vim.api -- api options
 local kset  = vim.keymap
 local lset  = vim.opt_local
 local vset  = vim.v
+local vlp   = vim.loop
 
 -- === Disable matchparen plugin ===
 vim.g.loaded_matchparen = 1
@@ -34,7 +35,7 @@ set.shadafile     = "NONE"            -- Defer persistent state
 
 -- === Disable LSP Logging ===
 vim.defer_fn(function()
-  vim.env.NVIM_LSP_LOG_FILE = vim.loop.os_uname().sysname == "Windows_NT" and "NUL" or "/dev/null"
+  vim.env.NVIM_LSP_LOG_FILE = vlp.os_uname().sysname == "Windows_NT" and "NUL" or "/dev/null"
   pcall(vim.lsp.set_log_level, "OFF")
 end, 100)
 
@@ -54,7 +55,6 @@ wset.breakindent  = false             -- No break indent
 pset.termguicolors = true             -- enabling richer themes
 
 set.showmode      = false
-set.undofile      = true              -- Enable persistent undo for large datasets
 set.swapfile      = false             -- Avoid swap files in streamlined setups
 set.backup        = false
 set.writebackup   = false             -- Disable redundant writes
@@ -94,9 +94,48 @@ set.completeopt   = "menuone,noinsert,noselect" -- Better completion experience
 set.splitright    = true              -- New vertical splits on the right
 set.splitbelow    = true              -- New horizontal splits below
 
--- === Memory and Undo Persistence ===
+-- === Memory Section ===
 set.history       = 10000             -- Long command history
-set.undolevels    = 1000              -- Extended undo levels
+
+-- === Toggle Undo Modes ===
+local UNDO_GLOBAL = fset.stdpath("data") .. "/undo"
+local UNDO_CWD    = fset.getcwd() .. "/.nvimundo"
+
+local state = { current = "global" }
+
+local function ensure_dir(path)
+  if not vlp.fs_stat(path) then
+    assert(vlp.fs_mkdir(path, 0x1C0), "Failed to create undodir: " .. path) -- 0700 = 0x1C0
+  end
+end
+
+local function set_undodir(path)
+  ensure_dir(path)
+  pset.undodir   = path
+  set.undofile   = true        -- Enable persistent undo for large datasets
+  set.undolevels = 1000        -- Extended undo levels
+end
+
+local function toggle_undo()
+  if state.current == "global" then
+    set_undodir(UNDO_CWD)
+    state.current = "cwd"
+    vim.notify("Undo mode: CWD (.nvimundo)", vim.log.levels.INFO)
+  else -- switch to default nvim
+    set_undodir(UNDO_GLOBAL)
+    state.current = "global"
+    vim.notify("Undo mode: GLOBAL", vim.log.levels.INFO)
+  end
+end
+
+-- Default: always global at startup
+set_undodir(UNDO_GLOBAL)
+state.current = "global"
+
+-- command for toggling undo modes
+aset.nvim_create_user_command("ToggleUndoMode", toggle_undo, {
+  desc = "Toggle between global and cwd undo modes",
+})
 
 -- === Arrow Key Blackout (Force Keyboard Discipline) ===
 local set_nop = kset.set
