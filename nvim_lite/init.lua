@@ -26,11 +26,9 @@ pset.cursorcolumn = false
 set.mouse         = ""                -- Disable mouse support
 set.updatetime    = 100               -- Faster responsiveness
 set.lazyredraw    = true              -- Only redraw when needed
-set.ttyfast       = true              -- Optimization for fast terminal redraw
 set.synmaxcol     = 200               -- Limit syntax highlighting width for performance
 set.redrawtime    = 1000              -- Max time for full redraw
 set.maxmempattern = 2000              -- Cap pattern search memory
-set.shadafile     = "NONE"            -- Defer persistent state
 
 -- === Disable LSP Logging ===
 vim.defer_fn(function()
@@ -63,13 +61,37 @@ set.timeoutlen    = 300               -- Faster timeout for mapped sequences
 set.ttimeoutlen   = 40                -- Faster keycode timeouts
 set.keymodel      = ""                -- Avoid legacy keymodel semantics
 
--- === Syntax Performance Tweaks ===
+-- ============================================
+-- SYNTAX AND LARGE FILE OPTIMIZATION
+-- ============================================
+
 aset.nvim_create_autocmd("FileType", {
-  group = aset.nvim_create_augroup("SyntaxSyncOptimization", { clear = true }),
-  pattern = { "c", "cpp", "java", "python", "lua", "javascript", "typescript" },
-  callback = function()
-    cset("syntax sync minlines=200")
-    cset("syntax sync maxlines=500")
+  group = aset.nvim_create_augroup("PerfFileTypeHandler", { clear = true }),
+  pattern = { "*" },
+  callback = function(args)
+    local ft = args.match
+    local line_count = fset.line("$")
+
+    if vim.tbl_contains({ "c", "cpp", "java", "python", "lua", "javascript", "typescript" }, ft) then
+      cset("syntax sync minlines=200")
+      cset("syntax sync maxlines=500")
+    end
+
+    if vim.tbl_contains({ "json", "yaml", "markdown", "text", "plaintex" }, ft) then
+      if line_count > 1000 then
+        lset.foldmethod   = "manual"
+        lset.synmaxcol    = 300
+        lset.wrap         = true
+        lset.linebreak    = true
+        lset.breakindent  = true
+      else
+        lset.foldmethod   = "indent"
+        lset.synmaxcol    = 500
+        lset.wrap         = false
+        lset.linebreak    = false
+        lset.breakindent  = false
+      end
+    end
   end
 })
 
@@ -109,14 +131,13 @@ end
 
 -- Fast Lua-native trailing whitespace cleaner
 local function trim_trailing_whitespace()
-  if not vim.bo.modified then return end
+  if not vim.bo.modifiable or not vim.bo.modified then return end
 
-  local line_count = fset.line("$")
-  if line_count >= 1000 then return end -- short-circuit large files
+  if fset.line("$") >= 1000 then return end -- short-circuit large files
 
   local bufnr = aset.nvim_get_current_buf()
   local changed = false
-  local lines = aset.nvim_buf_get_lines(bufnr, 0, line_count, false)
+  local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   for i = 1, #lines do
     local orig = lines[i]
@@ -129,7 +150,7 @@ local function trim_trailing_whitespace()
 
   if changed then
     local view = fset.winsaveview()
-    aset.nvim_buf_set_lines(bufnr, 0, line_count, false, lines)
+    aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
     fset.winrestview(view)
   end
 end
@@ -139,28 +160,6 @@ aset.nvim_create_autocmd("BufWritePre", {
   group = aset.nvim_create_augroup("TrimWhitespace", { clear = true }),
   pattern = { "*.lua", "*.c", "*.cpp", "*.py", "*.js", "*.java" },
   callback = trim_trailing_whitespace
-})
-
--- === Adaptive Optimization for Large Files ===
-aset.nvim_create_autocmd("FileType", {
-  group = aset.nvim_create_augroup("LargeFileOpts", { clear = true }),
-  pattern = { "json", "yaml", "markdown", "text", "plaintex" },
-  callback = function()
-    local line_count = fset.line("$")
-    if line_count > 1000 then
-      lset.foldmethod   = "manual"
-      lset.synmaxcol    = 300
-      lset.wrap         = true       -- Enable wrap for readability
-      lset.linebreak    = true       -- Break at word boundaries
-      lset.breakindent  = true       -- Preserve indentation
-    else
-      lset.foldmethod   = "indent"
-      lset.synmaxcol    = 500
-      lset.wrap         = false      -- Maintain coding default
-      lset.linebreak    = false
-      lset.breakindent  = false
-    end
-  end,
 })
 
 -- === Deferred Non-Critical Initialization ===
@@ -264,45 +263,33 @@ _G.zen_mode = {
 }
 
 function _G.tabline_numbers()
-  local s           = ''
-  local current_tab = fset.tabpagenr()
-  local total_tabs  = fset.tabpagenr('$')
-  local zen         = _G.zen_mode.active
+  local result = {}
+  local current = fset.tabpagenr()
+  local total = fset.tabpagenr('$')
+  local zen = _G.zen_mode.active
 
-  for i = 1, total_tabs do
+  for i = 1, total do
+    local hl = (i == current) and '%#TabLineSel#' or '%#TabLine#'
     local label = tostring(i)
+    local buflist = fset.tabpagebuflist(i)
+    local winnr = fset.tabpagewinnr(i)
+    local bufnr = buflist[winnr] or 0
 
-    -- Safely fetch window & buffer list
-    local ok_w, winnr  = pcall(fset.tabpagewinnr, i)
-    local ok_b, buflst = pcall(fset.tabpagebuflist, i)
-    if ok_w and ok_b and winnr and buflst then
-      local bufnr = buflst[winnr] or 0
-      if fset.bufexists(bufnr) == 1 then
-        -- modified flag
-        local mod = ''
-        local ok_m, is_m = pcall(fset.getbufvar, bufnr, '&modified')
-        if ok_m and is_m == 1 then mod = '+' end
-
-        if not zen then
-          local raw  = fset.bufname(bufnr) or ''
-          local name = fset.fnamemodify(raw, ':t')
-          if name == '' then name = '[No Name]' end
-          label = label .. ':' .. name .. mod
-        else
-          -- Zen mode: number only (+ if modified)
-          label = label .. mod
-        end
+    if fset.bufexists(bufnr) == 1 then
+      local mod = (fset.getbufvar(bufnr, '&modified') == 1) and '+' or ''
+      if not zen then
+        local name = fset.fnamemodify(fset.bufname(bufnr), ':t')
+        name = (name ~= "") and name or '[No Name]'
+        label = label .. ':' .. name .. mod
+      else
+        label = label .. mod
       end
     end
 
-    -- highlight, then fill
-    local hl = (i == current_tab)
-             and '%#TabLineSel#'
-             or '%#TabLine#'
-    s = s .. string.format('%s %s %%#TabLineFill#', hl, label)
+    result[#result+1] = hl .. ' ' .. label .. ' '
   end
 
-  return s
+  return table.concat(result) .. '%#TabLineFill#'
 end
 
 -- Always use our Lua tabline renderer:
