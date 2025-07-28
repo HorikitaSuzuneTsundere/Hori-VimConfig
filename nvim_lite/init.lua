@@ -14,6 +14,7 @@ local aset  = vim.api -- api options
 local kset  = vim.keymap
 local lset  = vim.opt_local
 local vset  = vim.v
+local bset  = vim.bo
 
 -- === Disable matchparen plugin ===
 vim.g.loaded_matchparen = 1
@@ -131,7 +132,7 @@ end
 
 -- Fast Lua-native trailing whitespace cleaner
 local function trim_trailing_whitespace()
-  if not vim.bo.modifiable or not vim.bo.modified then return end
+  if not bset.modifiable or not bset.modified then return end
 
   if fset.line("$") >= 1000 then return end -- short-circuit large files
 
@@ -393,4 +394,67 @@ aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
       wset.signcolumn = zen_mode.config.signcolumn
     end
   end
+})
+
+-- ================================
+-- TAB-TO-SPACES CONVERTER
+-- ================================
+local convert_tabs_to_spaces = function()
+  if not bset.modifiable then return end -- skip uneditable buffers
+
+  local buf = aset.nvim_get_current_buf()
+  local tabstop = bset.tabstop
+  local lines = aset.nvim_buf_get_lines(buf, 0, -1, false)
+
+  local any_changed = false
+  local update_lines = {}
+
+  for i = 1, #lines do
+    local line = lines[i]
+    if not line:find("\t", 1, true) then
+      update_lines[i] = false -- no tab, skip
+    else
+      local col = 0
+      local new_line = {}
+      local changed = false
+
+      for j = 1, #line do
+        local c = line:sub(j, j)
+        if c == "\t" then
+          local spaces = tabstop - (col % tabstop)
+          new_line[#new_line+1] = string.rep(" ", spaces) -- insert spaces
+          col = col + spaces
+          changed = true
+        else
+          new_line[#new_line+1] = c -- keep char
+          col = col + 1 -- assume ASCII
+        end
+      end
+
+      if changed then
+        update_lines[i] = table.concat(new_line) -- save updated
+        any_changed = true
+      else
+        update_lines[i] = false -- no actual change
+      end
+    end
+  end
+
+  if not any_changed then return end -- nothing to do
+
+  local view = fset.winsaveview() -- save cursor
+
+  for i, updated in pairs(update_lines) do
+    if updated then
+      aset.nvim_buf_set_lines(buf, i-1, i, false, { updated }) -- write changed
+    end
+  end
+
+  fset.winrestview(view) -- restore cursor
+end
+
+aset.nvim_create_autocmd("BufWritePre", {
+  group = aset.nvim_create_augroup("ConvertTabsToSpaces", { clear = true }), -- setup group
+  pattern = "*", -- all files
+  callback = convert_tabs_to_spaces, -- hook on save
 })
