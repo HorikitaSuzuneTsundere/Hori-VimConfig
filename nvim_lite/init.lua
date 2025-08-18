@@ -16,8 +16,20 @@ local lset  = vim.opt_local
 local vset  = vim.v
 local bset  = vim.bo
 
--- === Disable matchparen plugin ===
-vim.g.loaded_matchparen = 1
+-- === Disable plugin ===
+vim.g.loaded_matchparen        = 1
+vim.g.loaded_gzip              = 1
+vim.g.loaded_tar               = 1
+vim.g.loaded_tarPlugin         = 1
+vim.g.loaded_zip               = 1
+vim.g.loaded_zipPlugin         = 1
+vim.g.loaded_getscript         = 1
+vim.g.loaded_getscriptPlugin   = 1
+vim.g.loaded_vimball           = 1
+vim.g.loaded_vimballPlugin     = 1
+vim.g.loaded_rrhelper          = 1
+vim.g.loaded_2html_plugin      = 1
+vim.g.loaded_logiPat           = 1
 
 -- === Disable heavy plugins ===
 pset.cursorline = false
@@ -28,7 +40,7 @@ set.mouse         = ""                -- Disable mouse support
 set.updatetime    = 100               -- Faster responsiveness
 set.lazyredraw    = true              -- Only redraw when needed
 set.synmaxcol     = 200               -- Limit syntax highlighting width for performance
-set.redrawtime    = 1000              -- Max time for full redraw
+set.redrawtime    = 200              -- Max time for full redraw
 set.maxmempattern = 2000              -- Cap pattern search memory
 
 -- === Disable LSP Logging ===
@@ -53,14 +65,19 @@ wset.breakindent  = false             -- No break indent
 pset.termguicolors = true             -- enabling richer themes
 
 set.showmode      = false
+set.modeline      = false
 set.undofile      = true              -- Enable persistent undo for large datasets
 set.swapfile      = false             -- Avoid swap files in streamlined setups
 set.backup        = false
 set.writebackup   = false             -- Disable redundant writes
+set.backupskip    = "/tmp/*,/private/tmp/*"
 
 set.timeoutlen    = 300               -- Faster timeout for mapped sequences
 set.ttimeoutlen   = 40                -- Faster keycode timeouts
 set.keymodel      = ""                -- Avoid legacy keymodel semantics
+
+set.encoding        = "utf-8"
+set.fileencodings   = "utf-8"
 
 -- ============================================
 -- SYNTAX AND LARGE FILE OPTIMIZATION
@@ -118,8 +135,8 @@ set.splitright    = true              -- New vertical splits on the right
 set.splitbelow    = true              -- New horizontal splits below
 
 -- === Memory and Undo Persistence ===
-set.history       = 10000             -- Long command history
-set.undolevels    = 1000              -- Extended undo levels
+set.history       = 2000             -- Long command history
+set.undolevels    = 200              -- Extended undo levels
 
 -- === Arrow Key Blackout (Force Keyboard Discipline) ===
 local set_nop = kset.set
@@ -133,27 +150,18 @@ end
 -- Fast Lua-native trailing whitespace cleaner
 local function trim_trailing_whitespace()
   if not bset.modifiable or not bset.modified then return end
-
-  if fset.line("$") >= 1000 then return end -- short-circuit large files
+  if fset.line("$") > 2000 then return end -- safe guard
 
   local bufnr = aset.nvim_get_current_buf()
   local changed = false
-  local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
-
-  for i = 1, #lines do
-    local orig = lines[i]
-    local trimmed = orig:match("^(.-)%s*$")
-    if orig ~= trimmed then
-      lines[i] = trimmed
+  for i, line in ipairs(aset.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    local trimmed = line:match("^(.-)%s*$")
+    if trimmed ~= line then
+      aset.nvim_buf_set_lines(bufnr, i-1, i, false, { trimmed })
       changed = true
     end
   end
-
-  if changed then
-    local view = fset.winsaveview()
-    aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-    fset.winrestview(view)
-  end
+  if changed then fset.winrestview(fset.winsaveview()) end
 end
 
 -- === Whitespace Cleaner (Pre-Save Hook) ===
@@ -399,58 +407,10 @@ aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
 -- ================================
 -- TAB-TO-SPACES CONVERTER
 -- ================================
-local convert_tabs_to_spaces = function()
-  if not bset.modifiable then return end -- skip uneditable buffers
-
-  local buf = aset.nvim_get_current_buf()
-  local tabstop = bset.tabstop
-  local lines = aset.nvim_buf_get_lines(buf, 0, -1, false)
-
-  local any_changed = false
-  local update_lines = {}
-
-  for i = 1, #lines do
-    local line = lines[i]
-    if not line:find("\t", 1, true) then
-      update_lines[i] = false -- no tab, skip
-    else
-      local col = 0
-      local new_line = {}
-      local changed = false
-
-      for j = 1, #line do
-        local c = line:sub(j, j)
-        if c == "\t" then
-          local spaces = tabstop - (col % tabstop)
-          new_line[#new_line+1] = string.rep(" ", spaces) -- insert spaces
-          col = col + spaces
-          changed = true
-        else
-          new_line[#new_line+1] = c -- keep char
-          col = col + 1 -- assume ASCII
-        end
-      end
-
-      if changed then
-        update_lines[i] = table.concat(new_line) -- save updated
-        any_changed = true
-      else
-        update_lines[i] = false -- no actual change
-      end
-    end
-  end
-
-  if not any_changed then return end -- nothing to do
-
-  local view = fset.winsaveview() -- save cursor
-
-  for i, updated in pairs(update_lines) do
-    if updated then
-      aset.nvim_buf_set_lines(buf, i-1, i, false, { updated }) -- write changed
-    end
-  end
-
-  fset.winrestview(view) -- restore cursor
+local function convert_tabs_to_spaces()
+  if not bset.modifiable then return end
+  if fset.search("\t") == 0 then return end
+  cset([[%s/\t/  /ge]])
 end
 
 aset.nvim_create_autocmd("BufWritePre", {
