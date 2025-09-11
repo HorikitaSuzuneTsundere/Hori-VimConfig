@@ -15,21 +15,29 @@ local kset  = vim.keymap
 local lset  = vim.opt_local
 local vset  = vim.v
 local bset  = vim.bo
+local gset  = vim.g
 
 -- === Disable plugin ===
-vim.g.loaded_matchparen        = 1
-vim.g.loaded_gzip              = 1
-vim.g.loaded_tar               = 1
-vim.g.loaded_tarPlugin         = 1
-vim.g.loaded_zip               = 1
-vim.g.loaded_zipPlugin         = 1
-vim.g.loaded_getscript         = 1
-vim.g.loaded_getscriptPlugin   = 1
-vim.g.loaded_vimball           = 1
-vim.g.loaded_vimballPlugin     = 1
-vim.g.loaded_rrhelper          = 1
-vim.g.loaded_2html_plugin      = 1
-vim.g.loaded_logiPat           = 1
+gset.loaded_matchparen        = 1
+gset.loaded_gzip              = 1
+gset.loaded_tar               = 1
+gset.loaded_tarPlugin         = 1
+gset.loaded_zip               = 1
+gset.loaded_zipPlugin         = 1
+gset.loaded_getscript         = 1
+gset.loaded_getscriptPlugin   = 1
+gset.loaded_vimball           = 1
+gset.loaded_vimballPlugin     = 1
+gset.loaded_rrhelper          = 1
+gset.loaded_2html_plugin      = 1
+gset.loaded_logiPat           = 1
+
+-- === Disable providers ===
+gset.loaded_python_provider = 0
+gset.loaded_python3_provider = 0
+gset.loaded_node_provider = 0
+gset.loaded_perl_provider = 0
+gset.loaded_ruby_provider = 0
 
 -- === Disable heavy plugins ===
 pset.cursorline = false
