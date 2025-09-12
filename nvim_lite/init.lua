@@ -195,23 +195,6 @@ aset.nvim_create_autocmd("VimEnter", {
 })
 
 -- === Integrated Statusline with Inline Search Count ===
--- Mode map to human-readable form
-local mode_map = {
-  n = "NORMAL",      no = "N·OP",         nov = "N·OP",
-  i = "INSERT",      ic = "INS·COMP",     ix = "INS·X",
-  v = "VISUAL",      V = "V·LINE",        [""] = "V·BLOCK",
-  c = "COMMAND",     cv = "VIM·EX",       ce = "EX",
-  r = "REPLACE",     R = "REPLACE",       Rx = "REPL·X",
-  s = "SELECT",      S = "S·LINE",        [""] = "S·BLOCK",
-  t = "TERMINAL"
-}
-
--- Return current mode (fallback safe)
-_G.get_mode = function()
-  local mode = aset.nvim_get_mode().mode
-  return mode_map[mode] or ("MODE(" .. fset.escape(mode, ' ') .. ")")
-end
-
 -- Return current search count
 _G.search_info = function()
   local ok, s = pcall(fset.searchcount, { maxcount = 0, timeout = 100 })
@@ -223,7 +206,6 @@ end
 
 -- Set statusline
 set.statusline = table.concat({
-  " %{v:lua.get_mode()} ",        -- Mode indicator
   "%t %y",                          -- File path
   "%h%m%r",                       -- Help, Modified, Readonly flags
   "%=",                           -- Alignment separator
