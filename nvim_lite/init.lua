@@ -204,12 +204,26 @@ _G.search_info = function()
   return ""
 end
 
+-- === Macro Recording Indicator ===
+_G.macro_info = function()
+  local reg = fset.reg_recording()
+  return (reg ~= "" and " REC @" .. reg .. " ") or ""
+end
+
+local macro_group = aset.nvim_create_augroup("MacroStatusline", { clear = true })
+
+aset.nvim_create_autocmd({ "RecordingEnter", "RecordingLeave" }, {
+  group = macro_group,
+  callback = function() cset("redrawstatus") end,
+})
+
 -- Set statusline
 set.statusline = table.concat({
-  "%t %y",                          -- File path
+  "%t %y",                        -- File path
   "%h%m%r",                       -- Help, Modified, Readonly flags
   "%=",                           -- Alignment separator
-  "Ln %l/%L, Col %c",                -- Line & column
+  "%{v:lua.macro_info()}",        -- Macro indicator
+  "Ln %l/%L, Col %c",             -- Line & column
   "%{v:lua.search_info()}",       -- Inline search result count
   " %P",                          -- Percentage through file
 })
