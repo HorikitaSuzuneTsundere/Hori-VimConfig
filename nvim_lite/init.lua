@@ -54,7 +54,7 @@ set.maxmempattern = 2000              -- Cap pattern search memory
 -- === Disable LSP Logging ===
 vim.defer_fn(function()
   vim.env.NVIM_LSP_LOG_FILE = vim.loop.os_uname().sysname == "Windows_NT" and "NUL" or "/dev/null"
-  pcall(vim.lsp.set_log_level, "OFF")
+  pcall(vim.lsp.log.set_level, "OFF")
 end, 100)
 
 -- Tabline highlight groups
