@@ -259,9 +259,10 @@ kset.set("n", "<Esc>", clear_hlsearch_if_active, {
   desc = "Fast clear hlsearch on <Esc> from Normal"
 })
 
--- === Zen Mode Configuration ===
+-- === Persistent Zen Mode State File ===
+local zen_state_file = vim.fn.stdpath("data") .. "/zen_mode_state"
 
--- === Zen Mode State ===
+-- === Enhanced Zen Mode Configuration ===
 _G.zen_mode = {
   active = false,
   saved  = {},
@@ -272,9 +273,37 @@ _G.zen_mode = {
     laststatus = 0,
     cmdheight  = 0,
     signcolumn = "no",
+    -- Additional ultra-lean settings
+    cursorline = false,
+    cursorcolumn = false,
+    list = false,
+    showmode = false,
+    ruler = false,
+    spell = false,
   },
 }
 
+-- === Save Zen State to Disk ===
+local function save_zen_state()
+  local f = io.open(zen_state_file, "w")
+  if f then
+    f:write(_G.zen_mode.active and "1" or "0")
+    f:close()
+  end
+end
+
+-- === Load Zen State from Disk ===
+local function load_zen_state()
+  local f = io.open(zen_state_file, "r")
+  if f then
+    local content = f:read("*a")
+    f:close()
+    return content:match("^1") ~= nil
+  end
+  return false
+end
+
+-- === Extended Tabline for Zen Mode ===
 function _G.tabline_numbers()
   local result = {}
   local current = fset.tabpagenr()
@@ -305,12 +334,11 @@ function _G.tabline_numbers()
   return table.concat(result) .. '%#TabLineFill#'
 end
 
--- Always use our Lua tabline renderer:
 set.tabline = '%!v:lua.tabline_numbers()'
 
+-- === Extended Setters for Additional Options ===
 local syntax_cmd = { on = "syntax on", off = "syntax off" }
 
--- Utility: Apply settings from table
 local setters = {
   syntax       = function(v) cset(syntax_cmd[v and "on" or "off"]) end,
   number       = function(v) wset.number = v end,
@@ -318,94 +346,149 @@ local setters = {
   laststatus   = function(v) set.laststatus = v end,
   cmdheight    = function(v) set.cmdheight = v end,
   signcolumn   = function(v) wset.signcolumn = v end,
+  cursorline   = function(v) wset.cursorline = v end,
+  cursorcolumn = function(v) wset.cursorcolumn = v end,
+  list         = function(v) wset.list = v end,
+  showmode     = function(v) set.showmode = v end,
+  ruler        = function(v) set.ruler = v end,
+  spell        = function(v) wset.spell = v end,
 }
 
--- Apply settings to the current window
-local function apply_settings(tbl)
-  for k,v in pairs(tbl) do
-    setters[k](v)
-  end
-end
-
--- Apply zen mode settings to all windows
+-- === Apply Settings to All Windows ===
 local function apply_to_all_windows(settings)
-  -- First apply global options
+  -- Global options
   for k, v in pairs(settings) do
-    if k ~= "number" and k ~= "signcolumn" then
+    if k ~= "number" and k ~= "signcolumn" and k ~= "cursorline" and
+       k ~= "cursorcolumn" and k ~= "list" and k ~= "spell" then
       if setters[k] then setters[k](v) end
     end
   end
 
-  -- Then apply window-local options to each window
+  -- Window-local options
   for _, win in ipairs(aset.nvim_list_wins()) do
     aset.nvim_win_call(win, function()
       if settings.number ~= nil then wset.number = settings.number end
       if settings.signcolumn ~= nil then wset.signcolumn = settings.signcolumn end
+      if settings.cursorline ~= nil then wset.cursorline = settings.cursorline end
+      if settings.cursorcolumn ~= nil then wset.cursorcolumn = settings.cursorcolumn end
+      if settings.list ~= nil then wset.list = settings.list end
+      if settings.spell ~= nil then wset.spell = settings.spell end
     end)
   end
 end
 
--- Zen toggle handler
+-- === Toggle Zen Mode ===
 local function toggle_zen_mode()
   if _G.zen_mode._busy then return end
   _G.zen_mode._busy = true
   vim.schedule(function() _G.zen_mode._busy = false end)
 
-  -- flip state
   _G.zen_mode.active = not _G.zen_mode.active
 
-  -- apply ui settings
   if _G.zen_mode.active then
-    -- save only the things you actually want to revert...
+    -- Save current state
     _G.zen_mode.saved = {
-      syntax     = set.syntax ~= "off",
-      number     = wset.number,
-      showcmd    = set.showcmd,
-      laststatus = set.laststatus,
-      cmdheight  = set.cmdheight,
-      signcolumn = wset.signcolumn,
-      status_hl  = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
+      syntax       = set.syntax ~= "off",
+      number       = wset.number,
+      showcmd      = set.showcmd,
+      laststatus   = set.laststatus,
+      cmdheight    = set.cmdheight,
+      signcolumn   = wset.signcolumn,
+      cursorline   = wset.cursorline,
+      cursorcolumn = wset.cursorcolumn,
+      list         = wset.list,
+      showmode     = set.showmode,
+      ruler        = set.ruler,
+      spell        = wset.spell,
+      status_hl    = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
     }
+
+    -- Apply ultra-lean zen settings
     apply_to_all_windows(_G.zen_mode.config)
-    -- no tabline touch here
+
     aset.nvim_set_hl(0, "StatusLine", {
       bg   = "NONE",
       fg   = _G.zen_mode.saved.status_hl.fg or "#ffffff",
       bold = _G.zen_mode.saved.status_hl.bold or false,
     })
   else
-    -- restore exactly what you saved
+    -- Restore saved state
     apply_to_all_windows(_G.zen_mode.saved)
     if _G.zen_mode.saved.status_hl then
       aset.nvim_set_hl(0, "StatusLine", _G.zen_mode.saved.status_hl)
     end
-    -- again, no tabline touch
   end
 
-  -- finally: force a redraw so tabline will re-evaluate
+  -- Save state to disk for persistence
+  save_zen_state()
+
   cset('redrawtabline')
 end
 
--- Keymap: Double space to toggle Zen
+-- === Keymap ===
 kset.set("n", "<Space><Space>", toggle_zen_mode, {
   desc = "Toggle Zen Mode",
   noremap = true,
   silent = true,
 })
 
--- Create autocommands to maintain zen mode settings for new windows/buffers
+-- === Auto-apply Zen Settings for New Windows ===
 local zen_group = aset.nvim_create_augroup("ZenModeAuto", { clear = true })
 
--- Apply zen settings when creating new windows
-aset.nvim_create_autocmd({"WinNew", "WinEnter"}, {
+aset.nvim_create_autocmd({"WinNew", "WinEnter", "BufWinEnter"}, {
   group = zen_group,
   callback = function()
-    if zen_mode.active then
-      -- Apply zen settings to the current window
-      wset.number = zen_mode.config.number
-      wset.signcolumn = zen_mode.config.signcolumn
+    if _G.zen_mode.active then
+      wset.number = _G.zen_mode.config.number
+      wset.signcolumn = _G.zen_mode.config.signcolumn
+      wset.cursorline = _G.zen_mode.config.cursorline
+      wset.cursorcolumn = _G.zen_mode.config.cursorcolumn
+      wset.list = _G.zen_mode.config.list
+      wset.spell = _G.zen_mode.config.spell
     end
   end
+})
+
+-- === Restore Zen Mode on Startup ===
+aset.nvim_create_autocmd("VimEnter", {
+  callback = function()
+    vim.defer_fn(function()
+      local should_enable = load_zen_state()
+      if should_enable and not _G.zen_mode.active then
+        -- Save current state BEFORE enabling zen mode
+        _G.zen_mode.saved = {
+          syntax       = set.syntax ~= "off",
+          number       = wset.number,
+          showcmd      = set.showcmd,
+          laststatus   = set.laststatus,
+          cmdheight    = set.cmdheight,
+          signcolumn   = wset.signcolumn,
+          cursorline   = wset.cursorline,
+          cursorcolumn = wset.cursorcolumn,
+          list         = wset.list,
+          showmode     = set.showmode,
+          ruler        = set.ruler,
+          spell        = wset.spell,
+          status_hl    = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
+        }
+
+        -- Enable zen mode without toggling (direct activation)
+        _G.zen_mode.active = true
+        apply_to_all_windows(_G.zen_mode.config)
+        aset.nvim_set_hl(0, "StatusLine", {
+          bg   = "NONE",
+          fg   = _G.zen_mode.saved.status_hl.fg or "#ffffff",
+          bold = _G.zen_mode.saved.status_hl.bold or false,
+        })
+        cset('redrawtabline')
+      end
+    end, 150)
+  end,
+})
+
+-- === Save State on Exit ===
+aset.nvim_create_autocmd("VimLeavePre", {
+  callback = save_zen_state
 })
 
 -- ================================
