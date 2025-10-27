@@ -38,7 +38,6 @@ end
 -- === Batch Option Setting ===
 local options = {
   -- Performance
-  mouse = "",
   updatetime = 100,
   lazyredraw = true,
   synmaxcol = 200,
@@ -46,7 +45,7 @@ local options = {
   maxmempattern = 2000,
   cursorline = false,
   cursorcolumn = false,
-  
+
   -- UI
   number = true,
   scrolloff = 10,
@@ -58,16 +57,16 @@ local options = {
   backup = false,
   writebackup = false,
   backupskip = "/tmp/*,/private/tmp/*",
-  
+
   -- Timing
   timeoutlen = 300,
   ttimeoutlen = 40,
   keymodel = "",
-  
+
   -- Encoding
   encoding = "utf-8",
   fileencodings = "utf-8",
-  
+
   -- Indentation
   expandtab = true,
   shiftwidth = 2,
@@ -75,19 +74,19 @@ local options = {
   softtabstop = 2,
   smartindent = true,
   autoindent = true,
-  
+
   -- Search
   ignorecase = true,
   smartcase = true,
   hlsearch = true,
   incsearch = true,
-  
+
   -- Interface
   cmdheight = 0,
   completeopt = "menuone,noinsert,noselect",
   splitright = true,
   splitbelow = true,
-  
+
   -- Memory
   history = 2000,
   undolevels = 200,
@@ -179,11 +178,11 @@ autocmd("FileType", {
   callback = function(args)
     local ft = args.match
     local cache_key = ft .. "_" .. args.buf
-    
+
     if syntax_cache:get(cache_key) then return end
-    
+
     local line_count = fset.line("$")
-    
+
     if tbl_contains(syntax_settings.fast, ft) then
       cset("syntax sync minlines=200 maxlines=500")
     elseif tbl_contains(syntax_settings.heavy, ft) and line_count > 1000 then
@@ -193,7 +192,7 @@ autocmd("FileType", {
       lset.linebreak = true
       lset.breakindent = true
     end
-    
+
     syntax_cache:set(cache_key, true)
   end
 })
@@ -207,24 +206,58 @@ for _, mode in ipairs({"n", "v"}) do
   end
 end
 
+-- Disable all mouse buttons in all modes
+local mouse_buttons = {
+  "<LeftMouse>", "<LeftDrag>", "<LeftRelease>",
+  "<MiddleMouse>", "<MiddleDrag>", "<MiddleRelease>",
+  "<RightMouse>", "<RightDrag>", "<RightRelease>",
+  "<2-LeftMouse>", "<3-LeftMouse>", "<4-LeftMouse>",
+  "<X1Mouse>", "<X2Mouse>",
+  "<ScrollWheelUp>", "<ScrollWheelDown>",
+  "<ScrollWheelLeft>", "<ScrollWheelRight>",
+}
+
+local mouse_nop_opts = { noremap = true, silent = true, desc = "Mouse Disabled" }
+local mouse_modes = { "n", "i", "v", "x", "c", "o", "t" }
+
+for _, mode in ipairs(mouse_modes) do
+  for _, button in ipairs(mouse_buttons) do
+    kset.set(mode, button, "<Nop>", mouse_nop_opts)
+  end
+end
+
+-- Ensure mouse is completely off
+set.mouse = ""
+set.mousefocus = false
+set.mousehide = true
+
+-- Disable terminal mouse in all windows (applied on window enter)
+local mouse_disable_group = augroup("DisableMouseCompletely", { clear = true })
+autocmd({ "WinEnter", "BufEnter", "VimEnter" }, {
+  group = mouse_disable_group,
+  callback = function()
+    set.mouse = ""
+  end
+})
+
 -- === Optimized Whitespace Trimmer ===
 local trim_pattern = "^(.-)%s*$"
 local function trim_trailing_whitespace()
   if not bset.modifiable or not bset.modified then return end
   local line_count = fset.line("$")
   if line_count > 2000 then return end
-  
+
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
   local changes = {}
-  
+
   for i, line in ipairs(lines) do
     local trimmed = line:match(trim_pattern)
     if trimmed ~= line then
       changes[#changes + 1] = {i - 1, trimmed}
     end
   end
-  
+
   if #changes > 0 then
     local view = fset.winsaveview()
     for _, change in ipairs(changes) do
@@ -276,7 +309,7 @@ _G.search_info = function()
   local key = vset.hlsearch .. "_" .. fset.getreg("/")
   local cached = search_cache:get(key)
   if cached then return cached end
-  
+
   local ok, s = pcall(fset.searchcount, { maxcount = 0, timeout = 100 })
   local result = ""
   if ok and s and s.total and s.total > 0 then
@@ -295,16 +328,16 @@ end
 local macro_group = augroup("MacroStatusline", { clear = true })
 autocmd("RecordingEnter", {
   group = macro_group,
-  callback = function() 
+  callback = function()
     macro_reg = fset.reg_recording()
-    cset("redrawstatus") 
+    cset("redrawstatus")
   end
 })
 autocmd("RecordingLeave", {
   group = macro_group,
-  callback = function() 
+  callback = function()
     macro_reg = ""
-    cset("redrawstatus") 
+    cset("redrawstatus")
   end
 })
 
@@ -314,7 +347,7 @@ set.statusline = statusline_template
 
 -- === Optimized Clear Highlight ===
 local function clear_hlsearch()
-  if vset.hlsearch == 1 then 
+  if vset.hlsearch == 1 then
     cset("nohlsearch")
     search_cache = Cache:new(10, 500) -- Clear cache
   end
@@ -383,7 +416,7 @@ local function batch_apply_settings(settings, is_global)
       end
     end
   end
-  
+
   local wins = aset.nvim_list_wins()
   for _, win in ipairs(wins) do
     aset.nvim_win_call(win, function()
@@ -402,20 +435,20 @@ function _G.tabline_numbers()
   local current = fset.tabpagenr()
   local total = fset.tabpagenr('$')
   local cache_key = current .. "_" .. total .. "_" .. (ZenMode.active and "z" or "n")
-  
+
   local cached = tab_cache:get(cache_key)
   if cached then return cached end
-  
+
   local parts = {}
   for i = 1, total do
     local hl = (i == current) and '%#TabLineSel#' or '%#TabLine#'
     local label = tostring(i)
-    
+
     if not ZenMode.active then
       local buflist = fset.tabpagebuflist(i)
       local winnr = fset.tabpagewinnr(i)
       local bufnr = buflist[winnr] or 0
-      
+
       if fset.bufexists(bufnr) == 1 then
         local mod = (fset.getbufvar(bufnr, '&modified') == 1) and '+' or ''
         local name = fset.fnamemodify(fset.bufname(bufnr), ':t')
@@ -423,10 +456,10 @@ function _G.tabline_numbers()
         label = label .. ':' .. name .. mod
       end
     end
-    
+
     parts[#parts+1] = hl .. ' ' .. label .. ' '
   end
-  
+
   local result = table.concat(parts) .. '%#TabLineFill#'
   tab_cache:set(cache_key, result)
   return result
@@ -439,9 +472,9 @@ local function toggle_zen_mode()
   if ZenMode._busy then return end
   ZenMode._busy = true
   schedule(function() ZenMode._busy = false end)
-  
+
   ZenMode.active = not ZenMode.active
-  
+
   if ZenMode.active then
     -- Save current state
     ZenMode.saved = {
@@ -459,7 +492,7 @@ local function toggle_zen_mode()
       spell = wset.spell,
       status_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
     }
-    
+
     batch_apply_settings(ZenMode.config, true)
     aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#ffffff", bold = false })
   else
@@ -468,7 +501,7 @@ local function toggle_zen_mode()
       aset.nvim_set_hl(0, "StatusLine", ZenMode.saved.status_hl)
     end
   end
-  
+
   save_zen_state()
   tab_cache = Cache:new(5, 200) -- Clear tab cache
   cset('redrawtabline')
@@ -516,7 +549,7 @@ autocmd("VimEnter", {
           spell = wset.spell,
           status_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
         }
-        
+
         ZenMode.active = true
         batch_apply_settings(ZenMode.config, true)
         aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#ffffff", bold = false })
