@@ -434,6 +434,11 @@ end
 
 set.tabline = '%!v:lua.tabline_numbers()'
 
+-- === Zen Mode Statusline (thin outline) ===
+function _G.zen_statusline()
+  return "~"
+end
+
 -- === Toggle Zen Mode ===
 local function toggle_zen_mode()
   if ZenMode._busy then return end
@@ -458,14 +463,19 @@ local function toggle_zen_mode()
       ruler = set.ruler,
       spell = wset.spell,
       status_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
+      statusline = set.statusline,
     }
     
     batch_apply_settings(ZenMode.config, true)
-    aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#ffffff", bold = false })
+    aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
+    set.statusline = "%!v:lua.zen_statusline()"
   else
     batch_apply_settings(ZenMode.saved, true)
     if ZenMode.saved.status_hl then
       aset.nvim_set_hl(0, "StatusLine", ZenMode.saved.status_hl)
+    end
+    if ZenMode.saved.statusline then
+      set.statusline = ZenMode.saved.statusline
     end
   end
   
@@ -515,11 +525,13 @@ autocmd("VimEnter", {
           ruler = set.ruler,
           spell = wset.spell,
           status_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
+          statusline = set.statusline,
         }
         
         ZenMode.active = true
         batch_apply_settings(ZenMode.config, true)
-        aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#ffffff", bold = false })
+        aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
+        set.statusline = "%!v:lua.zen_statusline()"
         cset('redrawtabline')
       end
     end, 150)
