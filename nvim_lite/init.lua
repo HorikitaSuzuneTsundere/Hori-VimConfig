@@ -46,7 +46,7 @@ local options = {
   maxmempattern = 2000,
   cursorline = false,
   cursorcolumn = false,
-  
+
   -- UI
   number = true,
   scrolloff = 10,
@@ -58,16 +58,16 @@ local options = {
   backup = false,
   writebackup = false,
   backupskip = "/tmp/*,/private/tmp/*",
-  
+
   -- Timing
   timeoutlen = 300,
   ttimeoutlen = 40,
   keymodel = "",
-  
+
   -- Encoding
   encoding = "utf-8",
   fileencodings = "utf-8",
-  
+
   -- Indentation
   expandtab = true,
   shiftwidth = 2,
@@ -75,19 +75,19 @@ local options = {
   softtabstop = 2,
   smartindent = true,
   autoindent = true,
-  
+
   -- Search
   ignorecase = true,
   smartcase = true,
   hlsearch = true,
   incsearch = true,
-  
+
   -- Interface
   cmdheight = 0,
   completeopt = "menuone,noinsert,noselect",
   splitright = true,
   splitbelow = true,
-  
+
   -- Memory
   history = 2000,
   undolevels = 200,
@@ -164,6 +164,41 @@ end
 local search_cache = Cache:new(10, 500)
 local syntax_cache = Cache:new(20, 2000)
 
+-- === Redraw Scheduler ===
+local RedrawScheduler = {
+  pending = {},
+  timer = nil,
+  delay = 16, -- ~60fps
+}
+
+function RedrawScheduler:schedule(redraw_type)
+  self.pending[redraw_type] = true
+
+  if self.timer then return end
+
+  self.timer = vim.defer_fn(function()
+    local needs_tabline = self.pending.tabline
+    local needs_status = self.pending.status
+    local needs_full = self.pending.full
+
+    self.pending = {}
+    self.timer = nil
+
+    if needs_full then
+      cset("redraw")
+    elseif needs_tabline and needs_status then
+      cset("redrawtabline")
+      cset("redrawstatus")
+    elseif needs_tabline then
+      cset("redrawtabline")
+    elseif needs_status then
+      cset("redrawstatus")
+    end
+  end, self.delay)
+end
+
+_G.redraw_scheduler = RedrawScheduler
+
 -- === Optimized Syntax Settings ===
 local syntax_settings = {
   fast = { "c", "cpp", "java", "python", "lua", "javascript", "typescript" },
@@ -179,11 +214,11 @@ autocmd("FileType", {
   callback = function(args)
     local ft = args.match
     local cache_key = ft .. "_" .. args.buf
-    
+
     if syntax_cache:get(cache_key) then return end
-    
+
     local line_count = fset.line("$")
-    
+
     if tbl_contains(syntax_settings.fast, ft) then
       cset("syntax sync minlines=200 maxlines=500")
     elseif tbl_contains(syntax_settings.heavy, ft) and line_count > 1000 then
@@ -193,12 +228,12 @@ autocmd("FileType", {
       lset.linebreak = true
       lset.breakindent = true
     end
-    
+
     syntax_cache:set(cache_key, true)
   end
 })
 
--- === Arrow Key Disable (optimized) ===
+-- === Arrow Key Disable ===
 local arrows = {"<Up>", "<Down>", "<Left>", "<Right>"}
 local nop_opts = { desc = "Arrow Disabled" }
 for _, mode in ipairs({"n", "v"}) do
@@ -211,37 +246,57 @@ end
 local trim_pattern = "^(.-)%s*$"
 local function trim_trailing_whitespace()
   if not bset.modifiable or not bset.modified then return end
-  local line_count = fset.line("$")
-  if line_count > 2000 then return end
-  
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local changes = {}
-  
-  for i, line in ipairs(lines) do
-    local trimmed = line:match(trim_pattern)
-    if trimmed ~= line then
-      changes[#changes + 1] = {i - 1, trimmed}
-    end
+  local changed = false
+  local new_lines = {}
+
+  for i = 1, #lines do
+    local l = lines[i]
+    local trimmed = l:match(trim_pattern)
+    new_lines[i] = trimmed
+    if trimmed ~= l then changed = true end
   end
-  
-  if #changes > 0 then
-    local view = fset.winsaveview()
-    for _, change in ipairs(changes) do
-      aset.nvim_buf_set_lines(bufnr, change[1], change[1] + 1, false, {change[2]})
-    end
-    fset.winrestview(view)
-  end
+
+  if not changed then return end
+
+  -- save cursor (row, col)
+  local cur = aset.nvim_win_get_cursor(0) -- {row, col}, 1-based row
+  -- replace whole buffer in a single atomic call
+  aset.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+
+  -- restore cursor but clamp row to buffer length
+  local row = math.max(1, math.min(cur[1], #new_lines))
+  local col = cur[2]
+  -- ensure column is within line length (optional but safe)
+  local line_len = #new_lines[row]
+  if col > line_len then col = line_len end
+
+  pcall(aset.nvim_win_set_cursor, 0, { row, col })
 end
 
--- === Tab Converter (optimized with pattern cache) ===
-local tab_pattern = "\t"
-local tab_replacement = "  "
+-- === Tab Converter ===
+local tab_replacement = "  " -- 2 spaces
 local function convert_tabs_to_spaces()
   if not bset.modifiable then return end
-  local has_tabs = fset.search(tab_pattern) ~= 0
-  if has_tabs then
-    cset(string.format("%%s/%s/%s/ge", tab_pattern, tab_replacement))
+  local bufnr = aset.nvim_get_current_buf()
+  local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local changed = false
+  for i = 1, #lines do
+    local l = lines[i]
+    if l:find("\t", 1, true) then
+      lines[i] = l:gsub("\t", tab_replacement)
+      changed = true
+    end
+  end
+  if changed then
+    local cur = aset.nvim_win_get_cursor(0)
+    aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+    local row = math.max(1, math.min(cur[1], #lines))
+    local col = cur[2]
+    local line_len = #lines[row]
+    if col > line_len then col = line_len end
+    pcall(aset.nvim_win_set_cursor, 0, { row, col })
   end
 end
 
@@ -276,7 +331,7 @@ _G.search_info = function()
   local key = vset.hlsearch .. "_" .. fset.getreg("/")
   local cached = search_cache:get(key)
   if cached then return cached end
-  
+
   local ok, s = pcall(fset.searchcount, { maxcount = 0, timeout = 100 })
   local result = ""
   if ok and s and s.total and s.total > 0 then
@@ -286,8 +341,9 @@ _G.search_info = function()
   return result
 end
 
--- === Macro Recording Indicator ===
+-- === Macro Recording Indicator with Batched Redraws ===
 local macro_reg = ""
+
 _G.macro_info = function()
   return macro_reg ~= "" and (" REC @" .. macro_reg .. " ") or ""
 end
@@ -295,16 +351,16 @@ end
 local macro_group = augroup("MacroStatusline", { clear = true })
 autocmd("RecordingEnter", {
   group = macro_group,
-  callback = function() 
+  callback = function()
     macro_reg = fset.reg_recording()
-    cset("redrawstatus") 
+    RedrawScheduler:schedule("status")
   end
 })
 autocmd("RecordingLeave", {
   group = macro_group,
-  callback = function() 
+  callback = function()
     macro_reg = ""
-    cset("redrawstatus") 
+    RedrawScheduler:schedule("status")
   end
 })
 
@@ -314,7 +370,7 @@ set.statusline = statusline_template
 
 -- === Optimized Clear Highlight ===
 local function clear_hlsearch()
-  if vset.hlsearch == 1 then 
+  if vset.hlsearch == 1 then
     cset("nohlsearch")
     search_cache = Cache:new(10, 500) -- Clear cache
   end
@@ -337,6 +393,7 @@ local ZenMode = {
   active = false,
   saved = {},
   _busy = false,
+  _redraw_pending = false,
   config = {
     syntax = false,
     number = false,
@@ -383,7 +440,7 @@ local function batch_apply_settings(settings, is_global)
       end
     end
   end
-  
+
   local wins = aset.nvim_list_wins()
   for _, win in ipairs(wins) do
     aset.nvim_win_call(win, function()
@@ -402,20 +459,20 @@ function _G.tabline_numbers()
   local current = fset.tabpagenr()
   local total = fset.tabpagenr('$')
   local cache_key = current .. "_" .. total .. "_" .. (ZenMode.active and "z" or "n")
-  
+
   local cached = tab_cache:get(cache_key)
   if cached then return cached end
-  
+
   local parts = {}
   for i = 1, total do
     local hl = (i == current) and '%#TabLineSel#' or '%#TabLine#'
     local label = tostring(i)
-    
+
     if not ZenMode.active then
       local buflist = fset.tabpagebuflist(i)
       local winnr = fset.tabpagewinnr(i)
       local bufnr = buflist[winnr] or 0
-      
+
       if fset.bufexists(bufnr) == 1 then
         local mod = (fset.getbufvar(bufnr, '&modified') == 1) and '+' or ''
         local name = fset.fnamemodify(fset.bufname(bufnr), ':t')
@@ -423,10 +480,10 @@ function _G.tabline_numbers()
         label = label .. ':' .. name .. mod
       end
     end
-    
+
     parts[#parts+1] = hl .. ' ' .. label .. ' '
   end
-  
+
   local result = table.concat(parts) .. '%#TabLineFill#'
   tab_cache:set(cache_key, result)
   return result
@@ -439,14 +496,13 @@ function _G.zen_statusline()
   return "~"
 end
 
--- === Toggle Zen Mode ===
+-- === Toggle Zen Mode with Batched Redraw ===
 local function toggle_zen_mode()
   if ZenMode._busy then return end
   ZenMode._busy = true
-  schedule(function() ZenMode._busy = false end)
-  
+
   ZenMode.active = not ZenMode.active
-  
+
   if ZenMode.active then
     -- Save current state
     ZenMode.saved = {
@@ -465,7 +521,7 @@ local function toggle_zen_mode()
       status_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
       statusline = set.statusline,
     }
-    
+
     batch_apply_settings(ZenMode.config, true)
     aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
     set.statusline = "%!v:lua.zen_statusline()"
@@ -478,10 +534,15 @@ local function toggle_zen_mode()
       set.statusline = ZenMode.saved.statusline
     end
   end
-  
+
   save_zen_state()
   tab_cache = Cache:new(5, 200) -- Clear tab cache
-  cset('redrawtabline')
+
+  -- Schedule redraw instead of immediate
+  schedule(function()
+    ZenMode._busy = false
+    RedrawScheduler:schedule("tabline")
+  end)
 end
 
 kset.set("n", "<Space><Space>", toggle_zen_mode, {
@@ -490,17 +551,24 @@ kset.set("n", "<Space><Space>", toggle_zen_mode, {
   silent = true,
 })
 
--- === Auto-apply Zen Settings ===
+-- === Auto-apply Zen Settings with Redraw Guard ===
 local zen_group = augroup("ZenModeAuto", { clear = true })
+local zen_apply_pending = false
+
 autocmd({"WinNew", "WinEnter", "BufWinEnter"}, {
   group = zen_group,
   callback = function()
-    if ZenMode.active then
-      for _, opt in ipairs(ZenMode.window_opts) do
-        if ZenMode.config[opt] ~= nil then
-          wset[opt] = ZenMode.config[opt]
+    if ZenMode.active and not zen_apply_pending then
+      zen_apply_pending = true
+
+      schedule(function()
+        for _, opt in ipairs(ZenMode.window_opts) do
+          if ZenMode.config[opt] ~= nil then
+            wset[opt] = ZenMode.config[opt]
+          end
         end
-      end
+        zen_apply_pending = false
+      end)
     end
   end
 })
@@ -527,12 +595,16 @@ autocmd("VimEnter", {
           status_hl = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
           statusline = set.statusline,
         }
-        
+
         ZenMode.active = true
         batch_apply_settings(ZenMode.config, true)
         aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
         set.statusline = "%!v:lua.zen_statusline()"
-        cset('redrawtabline')
+
+        -- Defer redraw until after startup
+        schedule(function()
+          RedrawScheduler:schedule("tabline")
+        end)
       end
     end, 150)
   end,
@@ -542,14 +614,30 @@ autocmd("VimLeavePre", {
   callback = save_zen_state
 })
 
--- === Memory Management ===
+-- === Memory Management with Silent Cache Clearing ===
 autocmd("FocusLost", {
   callback = function()
-    -- Clear caches when vim loses focus
+    -- Clear caches silently without triggering redraws
     search_cache = Cache:new(10, 500)
     syntax_cache = Cache:new(20, 2000)
     tab_cache = Cache:new(5, 200)
     collectgarbage("collect")
+  end
+})
+
+-- === Optimized CursorMoved with Throttling ===
+local cursor_timer = nil
+autocmd("CursorMoved", {
+  callback = function()
+    if cursor_timer then return end
+
+    cursor_timer = vim.defer_fn(function()
+      cursor_timer = nil
+      -- Only trigger redraw if search is active
+      if vset.hlsearch == 1 then
+        RedrawScheduler:schedule("status")
+      end
+    end, 100)
   end
 })
 
