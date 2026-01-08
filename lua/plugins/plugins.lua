@@ -79,7 +79,7 @@ return {
   -- ----------------------------------------------------------------------------
   {
     "mason-org/mason.nvim",
-    version = "v2.1.0",
+    version = "v2.2.1",
     description = "Tool installer with optimized package management",
     cmd = "Mason",  -- Only load when the Mason command is explicitly used
     log_level = perf.logging.level,
