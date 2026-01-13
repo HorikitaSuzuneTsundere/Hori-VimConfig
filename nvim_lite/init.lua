@@ -131,7 +131,7 @@ for name, opts in pairs(highlights) do
   aset.nvim_set_hl(0, name, opts)
 end
 
--- === Fixed Cache System (no memory leaks) ===
+-- === Cache System ===
 local Cache = {}
 Cache.__index = Cache
 
@@ -176,7 +176,7 @@ function Cache:_remove_key(key)
   self.data[key] = nil
   local idx = self.key_index[key]
   if idx then
-    -- Mark as nil instead of table.remove (O(1) vs O(n))
+    -- Mark as nil instead of table.remove
     self.order[idx] = nil
     self.key_index[key] = nil
   end
@@ -317,7 +317,7 @@ end
 
 _G.redraw_scheduler = RedrawScheduler
 
--- === Optimized Syntax Settings ===
+-- === Syntax Settings ===
 local syntax_settings = {
   fast = { "c", "cpp", "java", "python", "lua", "javascript", "typescript" },
   heavy = { "json", "yaml", "markdown", "text", "plaintex" }
@@ -360,7 +360,7 @@ for _, mode in ipairs({"n", "v"}) do
   end
 end
 
--- === Optimized Whitespace Trimmer ===
+-- === Whitespace Trimmer ===
 local trim_pattern = "^(.-)%s*$"
 local function trim_trailing_whitespace()
   if not bset.modifiable or not bset.modified then return end
@@ -444,7 +444,7 @@ autocmd("VimEnter", {
   end,
 })
 
--- === Optimized Search Counter ===
+-- === Search Counter ===
 _G.search_info = function()
   local key = vset.hlsearch .. "_" .. fset.getreg("/")
   local cached = search_cache:get(key)
@@ -482,11 +482,11 @@ autocmd("RecordingLeave", {
   end
 })
 
--- === Optimized Statusline (pre-concatenated) ===
+-- === Statusline (pre-concatenated) ===
 local statusline_template = "%t %y%h%m%r%=%{v:lua.macro_info()}Ln %l/%L, Col %c%{v:lua.search_info()} %P"
 set.statusline = statusline_template
 
--- === Optimized Clear Highlight ===
+-- === Clear Highlight ===
 local function clear_hlsearch()
   if vset.hlsearch == 1 then
     cset("nohlsearch")
@@ -504,7 +504,7 @@ kset.set("n", "<Esc>", function()
   return "<Esc>"
 end, { expr = true, silent = true, noremap = true })
 
--- === Optimized Zen Mode with State Machine ===
+-- === Zen Mode with State Machine ===
 local zen_state_file = vim.fn.stdpath("data") .. "/zen_mode_state"
 
 -- Async file I/O for zen state (non-blocking)
@@ -598,7 +598,7 @@ local function batch_apply_settings(settings, is_global)
   end
 end
 
--- === Optimized Tabline ===
+-- === Tabline ===
 local tab_cache = Cache:new(5, 200)
 
 function _G.tabline_numbers()
@@ -795,7 +795,7 @@ autocmd("VimLeavePre", {
   end
 })
 
--- === Optimized CursorMoved with Proper Timer Management ===
+-- === CursorMoved with Proper Timer Management ===
 local cursor_timer = nil
 
 autocmd("CursorMoved", {
