@@ -20,6 +20,9 @@ local tbl_contains = vim.tbl_contains
 local defer_fn = vim.defer_fn
 local schedule = vim.schedule
 
+-- Use vim.uv (modern API, available in Neovim 0.10+) with fallback
+local uv = vim.uv or vim.loop
+
 -- === Batch Plugin & Provider Disabling ===
 local disabled_plugins = {
   'matchparen', 'gzip', 'tar', 'tarPlugin', 'zip', 'zipPlugin',
@@ -113,7 +116,7 @@ pset.termguicolors = true
 
 -- === Disable LSP Logging ===
 defer_fn(function()
-  local is_windows = vim.loop.os_uname().sysname == "Windows_NT"
+  local is_windows = uv.os_uname().sysname == "Windows_NT"
   vim.env.NVIM_LSP_LOG_FILE = is_windows and "NUL" or "/dev/null"
   pcall(vim.lsp.log.set_level, "OFF")
 end, 100)
@@ -128,73 +131,188 @@ for name, opts in pairs(highlights) do
   aset.nvim_set_hl(0, name, opts)
 end
 
--- === Cache System ===
+-- === Fixed Cache System (no memory leaks) ===
 local Cache = {}
 Cache.__index = Cache
 
 function Cache:new(max_size, ttl)
-  return setmetatable({
+  local instance = setmetatable({
     data = {},
     order = {},
+    key_index = {},  -- Track position of keys in order array
     max_size = max_size or 100,
     ttl = ttl or 1000,
+    _now_cache = 0,  -- Cached timestamp to reduce uv.now() calls
+    _now_valid = false,
   }, self)
+  return instance
+end
+
+-- Get current time with caching (valid for ~1ms batches)
+function Cache:_now()
+  if not self._now_valid then
+    self._now_cache = uv.now()
+    -- Invalidate on next event loop iteration
+    schedule(function() self._now_valid = false end)
+    self._now_valid = true
+  end
+  return self._now_cache
 end
 
 function Cache:get(key)
   local entry = self.data[key]
   if not entry then return nil end
-  if self.ttl and (vim.loop.now() - entry.time) > self.ttl then
-    self.data[key] = nil
+
+  local now = self:_now()
+  if self.ttl and (now - entry.time) > self.ttl then
+    self:_remove_key(key)
     return nil
   end
   return entry.value
 end
 
-function Cache:set(key, value)
-  if #self.order >= self.max_size then
-    local oldest = table.remove(self.order, 1)
-    self.data[oldest] = nil
+-- Internal: remove a key from both data and order tracking
+function Cache:_remove_key(key)
+  self.data[key] = nil
+  local idx = self.key_index[key]
+  if idx then
+    -- Mark as nil instead of table.remove (O(1) vs O(n))
+    self.order[idx] = nil
+    self.key_index[key] = nil
   end
-  self.data[key] = { value = value, time = vim.loop.now() }
-  table.insert(self.order, key)
+end
+
+function Cache:set(key, value)
+  local now = self:_now()
+
+  -- If key exists, update in place (no order change needed)
+  if self.data[key] then
+    self.data[key] = { value = value, time = now }
+    return
+  end
+
+  -- Evict oldest if at capacity (find first non-nil entry)
+  local count = 0
+  for _ in pairs(self.data) do count = count + 1 end
+
+  if count >= self.max_size then
+    -- Find oldest non-nil entry in order
+    for i = 1, #self.order do
+      local old_key = self.order[i]
+      if old_key then
+        self:_remove_key(old_key)
+        break
+      end
+    end
+  end
+
+  -- Compact order array periodically (every max_size insertions)
+  if #self.order > self.max_size * 2 then
+    self:_compact()
+  end
+
+  -- Add new entry
+  self.data[key] = { value = value, time = now }
+  self.order[#self.order + 1] = key
+  self.key_index[key] = #self.order
+end
+
+-- Compact the order array by removing nil entries
+function Cache:_compact()
+  local new_order = {}
+  local new_index = {}
+  for i = 1, #self.order do
+    local key = self.order[i]
+    if key and self.data[key] then
+      new_order[#new_order + 1] = key
+      new_index[key] = #new_order
+    end
+  end
+  self.order = new_order
+  self.key_index = new_index
+end
+
+-- Clear cache without creating new object (prevents orphaned tables)
+function Cache:clear()
+  self.data = {}
+  self.order = {}
+  self.key_index = {}
+  self._now_valid = false
+end
+
+-- Garbage collect expired entries
+function Cache:gc()
+  local now = self:_now()
+  local expired = {}
+
+  for key, entry in pairs(self.data) do
+    if self.ttl and (now - entry.time) > self.ttl then
+      expired[#expired + 1] = key
+    end
+  end
+
+  for _, key in ipairs(expired) do
+    self:_remove_key(key)
+  end
+
+  -- Compact if we removed entries
+  if #expired > 0 then
+    self:_compact()
+  end
 end
 
 -- === Global Caches ===
 local search_cache = Cache:new(10, 500)
 local syntax_cache = Cache:new(20, 2000)
 
--- === Redraw Scheduler ===
+-- === Redraw Scheduler (with proper timer management) ===
 local RedrawScheduler = {
   pending = {},
   timer = nil,
   delay = 16, -- ~60fps
 }
 
+function RedrawScheduler:_stop_timer()
+  if self.timer then
+    -- For vim.defer_fn, we can't stop it, but we can use uv.new_timer instead
+    self.timer = nil
+  end
+end
+
 function RedrawScheduler:schedule(redraw_type)
   self.pending[redraw_type] = true
 
   if self.timer then return end
 
-  self.timer = vim.defer_fn(function()
-    local needs_tabline = self.pending.tabline
-    local needs_status = self.pending.status
-    local needs_full = self.pending.full
+  -- Use uv timer for proper lifecycle control
+  local timer = uv.new_timer()
+  self.timer = timer
 
-    self.pending = {}
-    self.timer = nil
+  timer:start(self.delay, 0, function()
+    schedule(function()
+      -- Stop and close timer to prevent leaks
+      if timer:is_active() then timer:stop() end
+      if not timer:is_closing() then timer:close() end
 
-    if needs_full then
-      cset("redraw")
-    elseif needs_tabline and needs_status then
-      cset("redrawtabline")
-      cset("redrawstatus")
-    elseif needs_tabline then
-      cset("redrawtabline")
-    elseif needs_status then
-      cset("redrawstatus")
-    end
-  end, self.delay)
+      local needs_tabline = self.pending.tabline
+      local needs_status = self.pending.status
+      local needs_full = self.pending.full
+
+      self.pending = {}
+      self.timer = nil
+
+      if needs_full then
+        cset("redraw")
+      elseif needs_tabline and needs_status then
+        cset("redrawtabline")
+        cset("redrawstatus")
+      elseif needs_tabline then
+        cset("redrawtabline")
+      elseif needs_status then
+        cset("redrawstatus")
+      end
+    end)
+  end)
 end
 
 _G.redraw_scheduler = RedrawScheduler
@@ -249,27 +367,25 @@ local function trim_trailing_whitespace()
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
   local changed = false
-  local new_lines = {}
 
+  -- Modify in place instead of creating new table
   for i = 1, #lines do
     local l = lines[i]
     local trimmed = l:match(trim_pattern)
-    new_lines[i] = trimmed
-    if trimmed ~= l then changed = true end
+    if trimmed ~= l then
+      lines[i] = trimmed
+      changed = true
+    end
   end
 
   if not changed then return end
 
-  -- save cursor (row, col)
-  local cur = aset.nvim_win_get_cursor(0) -- {row, col}, 1-based row
-  -- replace whole buffer in a single atomic call
-  aset.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+  local cur = aset.nvim_win_get_cursor(0)
+  aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 
-  -- restore cursor but clamp row to buffer length
-  local row = math.max(1, math.min(cur[1], #new_lines))
+  local row = math.max(1, math.min(cur[1], #lines))
   local col = cur[2]
-  -- ensure column is within line length (optional but safe)
-  local line_len = #new_lines[row]
+  local line_len = #lines[row]
   if col > line_len then col = line_len end
 
   pcall(aset.nvim_win_set_cursor, 0, { row, col })
@@ -282,6 +398,7 @@ local function convert_tabs_to_spaces()
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
   local changed = false
+
   for i = 1, #lines do
     local l = lines[i]
     if l:find("\t", 1, true) then
@@ -289,6 +406,7 @@ local function convert_tabs_to_spaces()
       changed = true
     end
   end
+
   if changed then
     local cur = aset.nvim_win_get_cursor(0)
     aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
@@ -372,7 +490,7 @@ set.statusline = statusline_template
 local function clear_hlsearch()
   if vset.hlsearch == 1 then
     cset("nohlsearch")
-    search_cache = Cache:new(10, 500) -- Clear cache
+    search_cache:clear()  -- Clear instead of recreate
   end
 end
 
@@ -388,6 +506,9 @@ end, { expr = true, silent = true, noremap = true })
 
 -- === Optimized Zen Mode with State Machine ===
 local zen_state_file = vim.fn.stdpath("data") .. "/zen_mode_state"
+
+-- Async file I/O for zen state (non-blocking)
+local zen_state_cache = nil  -- In-memory cache to avoid repeated reads
 
 local ZenMode = {
   active = false,
@@ -412,21 +533,45 @@ local ZenMode = {
   global_opts = { "showcmd", "laststatus", "cmdheight", "showmode", "ruler" }
 }
 
--- === Optimized File I/O ===
-local function save_zen_state()
-  local f = io.open(zen_state_file, "w")
-  if f then
-    f:write(ZenMode.active and "1" or "0")
-    f:close()
-  end
+-- === Async File I/O for Zen State ===
+local function save_zen_state_async()
+  zen_state_cache = ZenMode.active  -- Update cache immediately
+
+  -- Non-blocking write using libuv
+  uv.fs_open(zen_state_file, "w", 438, function(err, fd)
+    if err or not fd then return end
+    local data = ZenMode.active and "1" or "0"
+    uv.fs_write(fd, data, 0, function(write_err)
+      uv.fs_close(fd, function() end)
+    end)
+  end)
 end
 
-local function load_zen_state()
-  local f = io.open(zen_state_file, "r")
-  if not f then return false end
-  local content = f:read(1)
-  f:close()
-  return content == "1"
+local function load_zen_state_sync()
+  -- Use cached value if available
+  if zen_state_cache ~= nil then
+    return zen_state_cache
+  end
+
+  -- Sync read only on startup (blocking is acceptable during init)
+  local fd = uv.fs_open(zen_state_file, "r", 438)
+  if not fd then
+    zen_state_cache = false
+    return false
+  end
+
+  local stat = uv.fs_fstat(fd)
+  if not stat or stat.size == 0 then
+    uv.fs_close(fd)
+    zen_state_cache = false
+    return false
+  end
+
+  local data = uv.fs_read(fd, 1, 0)
+  uv.fs_close(fd)
+
+  zen_state_cache = (data == "1")
+  return zen_state_cache
 end
 
 -- === Batch Window Operations ===
@@ -455,6 +600,7 @@ end
 
 -- === Optimized Tabline ===
 local tab_cache = Cache:new(5, 200)
+
 function _G.tabline_numbers()
   local current = fset.tabpagenr()
   local total = fset.tabpagenr('$')
@@ -463,6 +609,7 @@ function _G.tabline_numbers()
   local cached = tab_cache:get(cache_key)
   if cached then return cached end
 
+  -- Pre-allocate parts array with known size
   local parts = {}
   for i = 1, total do
     local hl = (i == current) and '%#TabLineSel#' or '%#TabLine#'
@@ -481,7 +628,7 @@ function _G.tabline_numbers()
       end
     end
 
-    parts[#parts+1] = hl .. ' ' .. label .. ' '
+    parts[i] = hl .. ' ' .. label .. ' '
   end
 
   local result = table.concat(parts) .. '%#TabLineFill#'
@@ -533,12 +680,13 @@ local function toggle_zen_mode()
     if ZenMode.saved.statusline then
       set.statusline = ZenMode.saved.statusline
     end
+    -- Clear saved state to free memory
+    ZenMode.saved = {}
   end
 
-  save_zen_state()
-  tab_cache = Cache:new(5, 200) -- Clear tab cache
+  save_zen_state_async()  -- Non-blocking save
+  tab_cache:clear()  -- Clear instead of recreate
 
-  -- Schedule redraw instead of immediate
   schedule(function()
     ZenMode._busy = false
     RedrawScheduler:schedule("tabline")
@@ -577,8 +725,7 @@ autocmd({"WinNew", "WinEnter", "BufWinEnter"}, {
 autocmd("VimEnter", {
   callback = function()
     defer_fn(function()
-      if load_zen_state() and not ZenMode.active then
-        -- Save current state BEFORE enabling
+      if load_zen_state_sync() and not ZenMode.active then
         ZenMode.saved = {
           syntax = set.syntax ~= "off",
           number = wset.number,
@@ -601,7 +748,6 @@ autocmd("VimEnter", {
         aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
         set.statusline = "%!v:lua.zen_statusline()"
 
-        -- Defer redraw until after startup
         schedule(function()
           RedrawScheduler:schedule("tabline")
         end)
@@ -611,33 +757,68 @@ autocmd("VimEnter", {
 })
 
 autocmd("VimLeavePre", {
-  callback = save_zen_state
+  callback = save_zen_state_async
 })
 
--- === Memory Management with Silent Cache Clearing ===
+-- === Memory Management with Proper Cache Clearing ===
 autocmd("FocusLost", {
   callback = function()
-    -- Clear caches silently without triggering redraws
-    search_cache = Cache:new(10, 500)
-    syntax_cache = Cache:new(20, 2000)
-    tab_cache = Cache:new(5, 200)
+    -- Run GC on caches to remove expired entries
+    search_cache:gc()
+    syntax_cache:gc()
+    tab_cache:gc()
+
+    -- Then do Lua garbage collection
     collectgarbage("collect")
   end
 })
 
--- === Optimized CursorMoved with Throttling ===
+-- === Periodic Cache GC (every 5 minutes) ===
+local gc_timer = uv.new_timer()
+if gc_timer then
+  gc_timer:start(300000, 300000, function()
+    schedule(function()
+      search_cache:gc()
+      syntax_cache:gc()
+      tab_cache:gc()
+    end)
+  end)
+end
+
+-- Cleanup on exit
+autocmd("VimLeavePre", {
+  callback = function()
+    if gc_timer and not gc_timer:is_closing() then
+      gc_timer:stop()
+      gc_timer:close()
+    end
+  end
+})
+
+-- === Optimized CursorMoved with Proper Timer Management ===
 local cursor_timer = nil
+
 autocmd("CursorMoved", {
   callback = function()
     if cursor_timer then return end
 
-    cursor_timer = vim.defer_fn(function()
-      cursor_timer = nil
-      -- Only trigger redraw if search is active
-      if vset.hlsearch == 1 then
-        RedrawScheduler:schedule("status")
-      end
-    end, 100)
+    cursor_timer = uv.new_timer()
+    if not cursor_timer then return end
+
+    cursor_timer:start(100, 0, function()
+      schedule(function()
+        -- Properly close timer to prevent leaks
+        if cursor_timer then
+          if cursor_timer:is_active() then cursor_timer:stop() end
+          if not cursor_timer:is_closing() then cursor_timer:close() end
+          cursor_timer = nil
+        end
+
+        if vset.hlsearch == 1 then
+          RedrawScheduler:schedule("status")
+        end
+      end)
+    end)
   end
 })
 
