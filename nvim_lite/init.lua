@@ -1,8 +1,4 @@
--- === Startup Optimization ===
--- Enable the new loader if available and not already enabled.
-if vim.loader and not vim.loader.enabled then
-  vim.loader.enable()
-end
+-- === Neovim 0.11.5 Optimized Configuration ===
 
 -- === Localized References (reduce table lookups) ===
 local set   = vim.o
@@ -19,9 +15,15 @@ local gset  = vim.g
 local tbl_contains = vim.tbl_contains
 local defer_fn = vim.defer_fn
 local schedule = vim.schedule
+local uv = vim.uv
 
--- Use vim.uv (modern API, available in Neovim 0.10+) with fallback
-local uv = vim.uv or vim.loop
+-- === Static Timer Allocation (Prevents GC churn) ===
+-- We allocate these once and reuse them by stopping/restarting
+local Timers = {
+  cursor = uv.new_timer(),
+  redraw = uv.new_timer(),
+  gc = uv.new_timer()
+}
 
 -- === Batch Plugin & Provider Disabling ===
 local disabled_plugins = {
@@ -43,7 +45,6 @@ local options = {
   -- Performance
   mouse = "",
   updatetime = 100,
-  lazyredraw = true,
   synmaxcol = 200,
   redrawtime = 200,
   maxmempattern = 2000,
@@ -115,11 +116,8 @@ end
 pset.termguicolors = true
 
 -- === Disable LSP Logging ===
-defer_fn(function()
-  local is_windows = uv.os_uname().sysname == "Windows_NT"
-  vim.env.NVIM_LSP_LOG_FILE = is_windows and "NUL" or "/dev/null"
-  pcall(vim.lsp.log.set_level, "OFF")
-end, 100)
+-- 0.11+ API, no need for defer_fn
+pcall(vim.lsp.set_log_level, "OFF")
 
 -- === Highlight Groups (batch set) ===
 local highlights = {
@@ -131,7 +129,7 @@ for name, opts in pairs(highlights) do
   aset.nvim_set_hl(0, name, opts)
 end
 
--- === Cache System ===
+-- === Cache System (Optimized) ===
 local Cache = {}
 Cache.__index = Cache
 
@@ -139,31 +137,19 @@ function Cache:new(max_size, ttl)
   local instance = setmetatable({
     data = {},
     order = {},
-    key_index = {},  -- Track position of keys in order array
+    key_index = {},
     max_size = max_size or 100,
     ttl = ttl or 1000,
-    _now_cache = 0,  -- Cached timestamp to reduce uv.now() calls
-    _now_valid = false,
   }, self)
   return instance
-end
-
--- Get current time with caching (valid for ~1ms batches)
-function Cache:_now()
-  if not self._now_valid then
-    self._now_cache = uv.now()
-    -- Invalidate on next event loop iteration
-    schedule(function() self._now_valid = false end)
-    self._now_valid = true
-  end
-  return self._now_cache
 end
 
 function Cache:get(key)
   local entry = self.data[key]
   if not entry then return nil end
 
-  local now = self:_now()
+  -- Optimization: Use uv.now() directly (cheaper than schedule overhead)
+  local now = uv.now()
   if self.ttl and (now - entry.time) > self.ttl then
     self:_remove_key(key)
     return nil
@@ -171,32 +157,27 @@ function Cache:get(key)
   return entry.value
 end
 
--- Internal: remove a key from both data and order tracking
 function Cache:_remove_key(key)
   self.data[key] = nil
   local idx = self.key_index[key]
   if idx then
-    -- Mark as nil instead of table.remove
     self.order[idx] = nil
     self.key_index[key] = nil
   end
 end
 
 function Cache:set(key, value)
-  local now = self:_now()
+  local now = uv.now()
 
-  -- If key exists, update in place (no order change needed)
   if self.data[key] then
     self.data[key] = { value = value, time = now }
     return
   end
 
-  -- Evict oldest if at capacity (find first non-nil entry)
   local count = 0
   for _ in pairs(self.data) do count = count + 1 end
 
   if count >= self.max_size then
-    -- Find oldest non-nil entry in order
     for i = 1, #self.order do
       local old_key = self.order[i]
       if old_key then
@@ -206,18 +187,15 @@ function Cache:set(key, value)
     end
   end
 
-  -- Compact order array periodically (every max_size insertions)
   if #self.order > self.max_size * 2 then
     self:_compact()
   end
 
-  -- Add new entry
   self.data[key] = { value = value, time = now }
   self.order[#self.order + 1] = key
   self.key_index[key] = #self.order
 end
 
--- Compact the order array by removing nil entries
 function Cache:_compact()
   local new_order = {}
   local new_index = {}
@@ -232,17 +210,14 @@ function Cache:_compact()
   self.key_index = new_index
 end
 
--- Clear cache without creating new object (prevents orphaned tables)
 function Cache:clear()
   self.data = {}
   self.order = {}
   self.key_index = {}
-  self._now_valid = false
 end
 
--- Garbage collect expired entries
 function Cache:gc()
-  local now = self:_now()
+  local now = uv.now()
   local expired = {}
 
   for key, entry in pairs(self.data) do
@@ -255,7 +230,6 @@ function Cache:gc()
     self:_remove_key(key)
   end
 
-  -- Compact if we removed entries
   if #expired > 0 then
     self:_compact()
   end
@@ -265,41 +239,26 @@ end
 local search_cache = Cache:new(10, 500)
 local syntax_cache = Cache:new(20, 2000)
 
--- === Redraw Scheduler (with proper timer management) ===
+-- === Redraw Scheduler (Timer Reuse) ===
 local RedrawScheduler = {
   pending = {},
-  timer = nil,
-  delay = 16, -- ~60fps
+  delay = 16,
 }
-
-function RedrawScheduler:_stop_timer()
-  if self.timer then
-    -- For vim.defer_fn, we can't stop it, but we can use uv.new_timer instead
-    self.timer = nil
-  end
-end
 
 function RedrawScheduler:schedule(redraw_type)
   self.pending[redraw_type] = true
 
-  if self.timer then return end
+  if Timers.redraw:is_active() then return end
 
-  -- Use uv timer for proper lifecycle control
-  local timer = uv.new_timer()
-  self.timer = timer
-
-  timer:start(self.delay, 0, function()
+  Timers.redraw:start(self.delay, 0, function()
     schedule(function()
-      -- Stop and close timer to prevent leaks
-      if timer:is_active() then timer:stop() end
-      if not timer:is_closing() then timer:close() end
+      Timers.redraw:stop()
 
       local needs_tabline = self.pending.tabline
       local needs_status = self.pending.status
       local needs_full = self.pending.full
 
       self.pending = {}
-      self.timer = nil
 
       if needs_full then
         cset("redraw")
@@ -360,61 +319,35 @@ for _, mode in ipairs({"n", "v"}) do
   end
 end
 
--- === Whitespace Trimmer ===
+-- === Whitespace/Tab Trimmer (Targeted Updates) ===
 local trim_pattern = "^(.-)%s*$"
+local tab_replacement = "  "
+
 local function trim_trailing_whitespace()
   if not bset.modifiable or not bset.modified then return end
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local changed = false
-
-  -- Modify in place instead of creating new table
-  for i = 1, #lines do
-    local l = lines[i]
+  
+  -- Optimization: Only write back lines that actually changed
+  for i, l in ipairs(lines) do
     local trimmed = l:match(trim_pattern)
     if trimmed ~= l then
-      lines[i] = trimmed
-      changed = true
+      aset.nvim_buf_set_lines(bufnr, i - 1, i, false, { trimmed })
     end
   end
-
-  if not changed then return end
-
-  local cur = aset.nvim_win_get_cursor(0)
-  aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-
-  local row = math.max(1, math.min(cur[1], #lines))
-  local col = cur[2]
-  local line_len = #lines[row]
-  if col > line_len then col = line_len end
-
-  pcall(aset.nvim_win_set_cursor, 0, { row, col })
 end
 
--- === Tab Converter ===
-local tab_replacement = "  " -- 2 spaces
 local function convert_tabs_to_spaces()
   if not bset.modifiable then return end
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local changed = false
-
-  for i = 1, #lines do
-    local l = lines[i]
+  
+  -- Optimization: Only write back lines that actually changed
+  for i, l in ipairs(lines) do
     if l:find("\t", 1, true) then
-      lines[i] = l:gsub("\t", tab_replacement)
-      changed = true
+      local converted = l:gsub("\t", tab_replacement)
+      aset.nvim_buf_set_lines(bufnr, i - 1, i, false, { converted })
     end
-  end
-
-  if changed then
-    local cur = aset.nvim_win_get_cursor(0)
-    aset.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-    local row = math.max(1, math.min(cur[1], #lines))
-    local col = cur[2]
-    local line_len = #lines[row]
-    if col > line_len then col = line_len end
-    pcall(aset.nvim_win_set_cursor, 0, { row, col })
   end
 end
 
@@ -446,7 +379,10 @@ autocmd("VimEnter", {
 
 -- === Search Counter ===
 _G.search_info = function()
-  local key = vset.hlsearch .. "_" .. fset.getreg("/")
+  -- Optimization: If hlsearch is off, don't even check registers
+  if vset.hlsearch == 0 then return "" end
+
+  local key = fset.getreg("/")
   local cached = search_cache:get(key)
   if cached then return cached end
 
@@ -459,7 +395,7 @@ _G.search_info = function()
   return result
 end
 
--- === Macro Recording Indicator with Batched Redraws ===
+-- === Macro Recording Indicator ===
 local macro_reg = ""
 
 _G.macro_info = function()
@@ -482,7 +418,7 @@ autocmd("RecordingLeave", {
   end
 })
 
--- === Statusline (pre-concatenated) ===
+-- === Statusline ===
 local statusline_template = "%t %y%h%m%r%=%{v:lua.macro_info()}Ln %l/%L, Col %c%{v:lua.search_info()} %P"
 set.statusline = statusline_template
 
@@ -490,7 +426,7 @@ set.statusline = statusline_template
 local function clear_hlsearch()
   if vset.hlsearch == 1 then
     cset("nohlsearch")
-    search_cache:clear()  -- Clear instead of recreate
+    search_cache:clear()
   end
 end
 
@@ -506,15 +442,12 @@ end, { expr = true, silent = true, noremap = true })
 
 -- === Zen Mode with State Machine ===
 local zen_state_file = vim.fn.stdpath("data") .. "/zen_mode_state"
-
--- Async file I/O for zen state (non-blocking)
-local zen_state_cache = nil  -- In-memory cache to avoid repeated reads
+local zen_state_cache = nil
 
 local ZenMode = {
   active = false,
   saved = {},
   _busy = false,
-  _redraw_pending = false,
   config = {
     syntax = false,
     number = false,
@@ -535,25 +468,22 @@ local ZenMode = {
 
 -- === Async File I/O for Zen State ===
 local function save_zen_state_async()
-  zen_state_cache = ZenMode.active  -- Update cache immediately
+  zen_state_cache = ZenMode.active
 
-  -- Non-blocking write using libuv
   uv.fs_open(zen_state_file, "w", 438, function(err, fd)
     if err or not fd then return end
     local data = ZenMode.active and "1" or "0"
-    uv.fs_write(fd, data, 0, function(write_err)
+    uv.fs_write(fd, data, 0, function(_)
       uv.fs_close(fd, function() end)
     end)
   end)
 end
 
 local function load_zen_state_sync()
-  -- Use cached value if available
   if zen_state_cache ~= nil then
     return zen_state_cache
   end
 
-  -- Sync read only on startup (blocking is acceptable during init)
   local fd = uv.fs_open(zen_state_file, "r", 438)
   if not fd then
     zen_state_cache = false
@@ -598,7 +528,7 @@ local function batch_apply_settings(settings, is_global)
   end
 end
 
--- === Tabline ===
+-- === Tabline (Optimized String Building) ===
 local tab_cache = Cache:new(5, 200)
 
 function _G.tabline_numbers()
@@ -609,11 +539,10 @@ function _G.tabline_numbers()
   local cached = tab_cache:get(cache_key)
   if cached then return cached end
 
-  -- Pre-allocate parts array with known size
   local parts = {}
   for i = 1, total do
-    local hl = (i == current) and '%#TabLineSel#' or '%#TabLine#'
-    local label = tostring(i)
+    table.insert(parts, (i == current) and '%#TabLineSel#' or '%#TabLine#')
+    table.insert(parts, ' ' .. tostring(i) .. ' ')
 
     if not ZenMode.active then
       local buflist = fset.tabpagebuflist(i)
@@ -624,26 +553,26 @@ function _G.tabline_numbers()
         local mod = (fset.getbufvar(bufnr, '&modified') == 1) and '+' or ''
         local name = fset.fnamemodify(fset.bufname(bufnr), ':t')
         name = (name ~= "") and name or '[No Name]'
-        label = label .. ':' .. name .. mod
+        table.insert(parts, ':' .. name .. mod)
       end
     end
-
-    parts[i] = hl .. ' ' .. label .. ' '
+    table.insert(parts, ' ')
   end
-
-  local result = table.concat(parts) .. '%#TabLineFill#'
+  
+  table.insert(parts, '%#TabLineFill#')
+  local result = table.concat(parts)
   tab_cache:set(cache_key, result)
   return result
 end
 
 set.tabline = '%!v:lua.tabline_numbers()'
 
--- === Zen Mode Statusline (thin outline) ===
+-- === Zen Mode Statusline ===
 function _G.zen_statusline()
   return "~"
 end
 
--- === Toggle Zen Mode with Batched Redraw ===
+-- === Toggle Zen Mode ===
 local function toggle_zen_mode()
   if ZenMode._busy then return end
   ZenMode._busy = true
@@ -651,7 +580,6 @@ local function toggle_zen_mode()
   ZenMode.active = not ZenMode.active
 
   if ZenMode.active then
-    -- Save current state
     ZenMode.saved = {
       syntax = set.syntax ~= "off",
       number = wset.number,
@@ -680,12 +608,11 @@ local function toggle_zen_mode()
     if ZenMode.saved.statusline then
       set.statusline = ZenMode.saved.statusline
     end
-    -- Clear saved state to free memory
     ZenMode.saved = {}
   end
 
-  save_zen_state_async()  -- Non-blocking save
-  tab_cache:clear()  -- Clear instead of recreate
+  save_zen_state_async()
+  tab_cache:clear()
 
   schedule(function()
     ZenMode._busy = false
@@ -699,7 +626,7 @@ kset.set("n", "<Space><Space>", toggle_zen_mode, {
   silent = true,
 })
 
--- === Auto-apply Zen Settings with Redraw Guard ===
+-- === Auto-apply Zen Settings ===
 local zen_group = augroup("ZenModeAuto", { clear = true })
 local zen_apply_pending = false
 
@@ -760,60 +687,40 @@ autocmd("VimLeavePre", {
   callback = save_zen_state_async
 })
 
--- === Memory Management with Proper Cache Clearing ===
+-- === Memory Management ===
 autocmd("FocusLost", {
   callback = function()
-    -- Run GC on caches to remove expired entries
     search_cache:gc()
     syntax_cache:gc()
     tab_cache:gc()
-
-    -- Then do Lua garbage collection
     collectgarbage("collect")
   end
 })
 
--- === Periodic Cache GC (every 5 minutes) ===
-local gc_timer = uv.new_timer()
-if gc_timer then
-  gc_timer:start(300000, 300000, function()
-    schedule(function()
-      search_cache:gc()
-      syntax_cache:gc()
-      tab_cache:gc()
-    end)
+-- === Periodic Cache GC (Timer Reuse) ===
+-- Use static timer, no reallocation
+Timers.gc:start(300000, 300000, function()
+  schedule(function()
+    search_cache:gc()
+    syntax_cache:gc()
+    tab_cache:gc()
   end)
-end
+end)
 
--- Cleanup on exit
 autocmd("VimLeavePre", {
   callback = function()
-    if gc_timer and not gc_timer:is_closing() then
-      gc_timer:stop()
-      gc_timer:close()
-    end
+    -- Clean up persistent timers
+    if Timers.gc:is_active() then Timers.gc:stop() end
+    Timers.gc:close()
   end
 })
 
--- === CursorMoved with Proper Timer Management ===
-local cursor_timer = nil
-
+-- === CursorMoved (Optimized with Static Timer) ===
 autocmd("CursorMoved", {
   callback = function()
-    if cursor_timer then return end
-
-    cursor_timer = uv.new_timer()
-    if not cursor_timer then return end
-
-    cursor_timer:start(100, 0, function()
+    Timers.cursor:stop()
+    Timers.cursor:start(100, 0, function()
       schedule(function()
-        -- Properly close timer to prevent leaks
-        if cursor_timer then
-          if cursor_timer:is_active() then cursor_timer:stop() end
-          if not cursor_timer:is_closing() then cursor_timer:close() end
-          cursor_timer = nil
-        end
-
         if vset.hlsearch == 1 then
           RedrawScheduler:schedule("status")
         end
