@@ -1,4 +1,4 @@
--- === Neovim 0.11.5 Optimized Configuration ===
+-- === Neovim 0.11.5 Configuration ===
 
 -- === Localized References (reduce table lookups) ===
 local set   = vim.o
@@ -129,7 +129,7 @@ for name, opts in pairs(highlights) do
   aset.nvim_set_hl(0, name, opts)
 end
 
--- === Cache System (Optimized) ===
+-- === Cache System ===
 local Cache = {}
 Cache.__index = Cache
 
@@ -148,7 +148,7 @@ function Cache:get(key)
   local entry = self.data[key]
   if not entry then return nil end
 
-  -- Optimization: Use uv.now() directly (cheaper than schedule overhead)
+  -- Use uv.now() directly (cheaper than schedule overhead)
   local now = uv.now()
   if self.ttl and (now - entry.time) > self.ttl then
     self:_remove_key(key)
@@ -328,7 +328,7 @@ local function trim_trailing_whitespace()
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
   
-  -- Optimization: Only write back lines that actually changed
+  -- Only write back lines that actually changed
   for i, l in ipairs(lines) do
     local trimmed = l:match(trim_pattern)
     if trimmed ~= l then
@@ -342,7 +342,7 @@ local function convert_tabs_to_spaces()
   local bufnr = aset.nvim_get_current_buf()
   local lines = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
   
-  -- Optimization: Only write back lines that actually changed
+  -- Only write back lines that actually changed
   for i, l in ipairs(lines) do
     if l:find("\t", 1, true) then
       local converted = l:gsub("\t", tab_replacement)
@@ -379,7 +379,7 @@ autocmd("VimEnter", {
 
 -- === Search Counter ===
 _G.search_info = function()
-  -- Optimization: If hlsearch is off, don't even check registers
+  -- If hlsearch is off, don't even check registers
   if vset.hlsearch == 0 then return "" end
 
   local key = fset.getreg("/")
@@ -528,7 +528,7 @@ local function batch_apply_settings(settings, is_global)
   end
 end
 
--- === Tabline (Optimized String Building) ===
+-- === Tabline (String Building) ===
 local tab_cache = Cache:new(5, 200)
 
 function _G.tabline_numbers()
@@ -715,7 +715,7 @@ autocmd("VimLeavePre", {
   end
 })
 
--- === CursorMoved (Optimized with Static Timer) ===
+-- === CursorMoved (with Static Timer) ===
 autocmd("CursorMoved", {
   callback = function()
     Timers.cursor:stop()
