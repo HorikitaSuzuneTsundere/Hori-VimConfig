@@ -7,6 +7,7 @@ To truly harness the *maximum potential* of this configuration, make sure you’
 - 🐱 **cat** – The classic file concatenation and printing tool
 - 📂 **ls** – The standard directory listing command
 - 🛠️ **xargs** – Chains commands using piped input
+- 📋 **clip** – Command-line clipboard integration
 
 ---
 
@@ -21,3 +22,4 @@ To truly harness the *maximum potential* of this configuration, make sure you’
 - 💾 **CMD** (Windows)
 
 Make your terminal workflow *faster, smarter, and more enjoyable* with these tools. Don't settle for stock.
+
