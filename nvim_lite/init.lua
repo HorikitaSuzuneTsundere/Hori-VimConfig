@@ -1,8 +1,6 @@
 -- === Neovim 0.11+ Configuration ===
 
 -- === Localized References ===
--- FIX: Replaced vim.o/vim.wo with vim.opt for correct list/set/map type handling.
---      Kept vim.bo (buffer-local) and vim.wo (per-window inside callbacks) where appropriate.
 local opt      = vim.opt
 local cmd      = vim.cmd
 local fn       = vim.fn
@@ -24,7 +22,6 @@ local Timers = {
 }
 
 -- === Batch Plugin & Provider Disabling ===
--- FIX: Added netrw family, matchit, and tutor — common startup-time culprits.
 local disabled_plugins = {
   'matchparen', 'matchit',
   'gzip', 'tar', 'tarPlugin', 'zip', 'zipPlugin',
@@ -45,10 +42,10 @@ end
 -- === Options ===
 -- Performance
 opt.mouse         = ""
-opt.updatetime    = 250         -- FIX: was 100ms; 250ms avoids excessive CursorHold/swap I/O
+opt.updatetime    = 250         
 opt.synmaxcol     = 200
-opt.redrawtime    = 1000        -- FIX: was 200ms — dangerously low; syntax gets terminated
-                                --      mid-file leaving uncolored text. 1000ms is a safe floor.
+opt.redrawtime    = 1000        
+                                
 opt.maxmempattern = 2000
 opt.cursorline    = false
 opt.cursorcolumn  = false
@@ -63,7 +60,7 @@ opt.undofile      = true
 opt.swapfile      = false
 opt.backup        = false
 opt.writebackup   = false
--- FIX: vim.opt treats backupskip as a list; appending is cleaner and cross-platform.
+
 opt.backupskip:append({ "/tmp/*", "/private/tmp/*" })
 
 -- Timing
@@ -72,8 +69,6 @@ opt.ttimeoutlen   = 40
 opt.keymodel      = ""
 
 -- Encoding
--- FIX: Removed `encoding = "utf-8"` — it is read-only in Neovim (always UTF-8).
---      Setting it was silently a no-op.
 opt.fileencodings = "utf-8"
 
 -- Indentation
@@ -92,7 +87,7 @@ opt.incsearch  = true
 
 -- Interface
 opt.cmdheight   = 0
-opt.completeopt = { "menuone", "noinsert", "noselect" }  -- FIX: list type via vim.opt
+opt.completeopt = { "menuone", "noinsert", "noselect" }  
 opt.splitright  = true
 opt.splitbelow  = true
 
@@ -104,8 +99,6 @@ opt.undolevels = 200
 opt.termguicolors = true
 
 -- === Window-local Defaults ===
--- FIX: Extracted into a function so it can be reapplied to new windows via WinNew.
---      Previously these were set once on vim.wo and silently lost for any new window.
 local win_defaults = {
   relativenumber = false,
   wrap           = false,
@@ -123,8 +116,6 @@ apply_win_defaults(0)  -- seed the initial window
 pcall(vim.lsp.set_log_level, "OFF")
 
 -- === Highlight Groups ===
--- FIX: Highlights were set at module load only. Any :colorscheme call would wipe them.
---      Now wrapped in a function and re-applied on ColorScheme.
 local function apply_highlights()
   local hl_defs = {
     TabLine     = { fg = '#808080', bg = '#1e1e1e' },
@@ -322,7 +313,6 @@ autocmd("FileType", {
 })
 
 -- === Apply Window Defaults to Every New Window ===
--- FIX: New windows created after startup were not getting win_defaults.
 autocmd({ "WinNew" }, {
   group    = augroup("WinDefaultsApply", { clear = true }),
   callback = function(args)
@@ -334,7 +324,6 @@ autocmd({ "WinNew" }, {
 })
 
 -- === Arrow Key Disable ===
--- FIX: Added noremap=true — without it, arrow mappings can be overridden downstream.
 local nop_opts = { desc = "Arrow Disabled", noremap = true, silent = true }
 for _, mode in ipairs({ "n", "v" }) do
   for _, arrow in ipairs({ "<Up>", "<Down>", "<Left>", "<Right>" }) do
@@ -353,13 +342,10 @@ local function clean_buffer()
   if not bo.modifiable then return end
   if not bo.modified   then return end
 
-  -- FIX: Skip special buffers (terminal, quickfix, prompt, etc.) to avoid corruption.
+  
   local bt = bo.buftype
   if bt ~= "" and bt ~= "acwrite" then return end
 
-  -- FIX: Respect per-buffer expandtab and tabstop instead of the hardcoded "  ".
-  --      Previously every tab was replaced with 2 spaces regardless of buffer settings,
-  --      which would corrupt Go files, Makefiles, and 4-space-indent projects.
   if not bo.expandtab then return end  -- don't mangle intentional tabs
   local tab_repl = string.rep(" ", bo.tabstop)
 
@@ -515,7 +501,6 @@ local ZenMode = {
   global_opts = { "showcmd", "laststatus", "cmdheight", "showmode", "ruler" },
 }
 
--- Build an O(1) lookup set for global_opts (fixes the original array-as-map bug).
 local _zen_global_opt_set = {}
 for _, k in ipairs(ZenMode.global_opts) do _zen_global_opt_set[k] = true end
 
@@ -738,8 +723,6 @@ local function run_gc()
   tab_cache:gc()
 end
 
--- FIX: collectgarbage("collect") on every FocusLost caused a hard GC pause
---      on every Alt-Tab with no cooldown. Added a 10-second minimum interval.
 local _gc_cooldown = false
 autocmd("FocusLost", {
   callback = function()
