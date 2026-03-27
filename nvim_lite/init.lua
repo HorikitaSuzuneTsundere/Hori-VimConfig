@@ -1,19 +1,18 @@
 -- === Neovim 0.11+ Configuration ===
 
 -- === Localized References ===
-local set   = vim.o
-local wset  = vim.wo
-local cset  = vim.cmd
-local fset  = vim.fn
-local aset  = vim.api
-local kset  = vim.keymap
-local lset  = vim.opt_local
-local vset  = vim.v
-local bset  = vim.bo
-local gset  = vim.g
+local opt      = vim.opt
+local cmd      = vim.cmd
+local fn       = vim.fn
+local api      = vim.api
+local kset     = vim.keymap
+local lset     = vim.opt_local
+local vset     = vim.v
+local bo       = vim.bo
+local g        = vim.g
 local defer_fn = vim.defer_fn
 local schedule = vim.schedule
-local uv = vim.uv
+local uv       = vim.uv
 
 -- === Static Timer Allocation (prevents GC churn) ===
 local Timers = {
@@ -24,101 +23,119 @@ local Timers = {
 
 -- === Batch Plugin & Provider Disabling ===
 local disabled_plugins = {
-  'matchparen', 'gzip', 'tar', 'tarPlugin', 'zip', 'zipPlugin',
+  'matchparen', 'matchit',
+  'gzip', 'tar', 'tarPlugin', 'zip', 'zipPlugin',
   'getscript', 'getscriptPlugin', 'vimball', 'vimballPlugin',
-  'rrhelper', '2html_plugin', 'logiPat'
+  'rrhelper', '2html_plugin', 'logiPat',
+  'netrw', 'netrwPlugin', 'netrwSettings', 'netrwFileHandlers',
+  'tutor',
 }
 for _, plugin in ipairs(disabled_plugins) do
-  gset['loaded_' .. plugin] = 1
+  g['loaded_' .. plugin] = 1
 end
 
 local disabled_providers = { 'python', 'python3', 'node', 'perl', 'ruby' }
 for _, provider in ipairs(disabled_providers) do
-  gset['loaded_' .. provider .. '_provider'] = 0
+  g['loaded_' .. provider .. '_provider'] = 0
 end
 
--- === Batch Option Setting ===
-local options = {
-  -- Performance
-  mouse          = "",
-  updatetime     = 100,
-  synmaxcol      = 200,
-  redrawtime     = 200,
-  maxmempattern  = 2000,
-  cursorline     = false,
-  cursorcolumn   = false,
+-- === Options ===
+-- Performance
+opt.mouse         = ""
+opt.updatetime    = 250         
+opt.synmaxcol     = 200
+opt.redrawtime    = 1000        
+                                
+opt.maxmempattern = 2000
+opt.cursorline    = false
+opt.cursorcolumn  = false
 
-  -- UI
-  number         = true,
-  scrolloff      = 10,
-  sidescrolloff  = 8,
-  showmode       = false,
-  modeline       = false,
-  undofile       = true,
-  swapfile       = false,
-  backup         = false,
-  writebackup    = false,
-  backupskip     = "/tmp/*,/private/tmp/*",
+-- UI
+opt.number        = true
+opt.scrolloff     = 10
+opt.sidescrolloff = 8
+opt.showmode      = false
+opt.modeline      = false
+opt.undofile      = true
+opt.swapfile      = false
+opt.backup        = false
+opt.writebackup   = false
 
-  -- Timing
-  timeoutlen     = 300,
-  ttimeoutlen    = 40,
-  keymodel       = "",
+opt.backupskip:append({ "/tmp/*", "/private/tmp/*" })
 
-  -- Encoding
-  encoding       = "utf-8",
-  fileencodings  = "utf-8",
+-- Timing
+opt.timeoutlen    = 300
+opt.ttimeoutlen   = 40
+opt.keymodel      = ""
 
-  -- Indentation
-  expandtab      = true,
-  shiftwidth     = 2,
-  tabstop        = 2,
-  softtabstop    = 2,
-  smartindent    = true,
-  autoindent     = true,
+-- Encoding
+opt.fileencodings = "utf-8"
 
-  -- Search
-  ignorecase     = true,
-  smartcase      = true,
-  hlsearch       = true,
-  incsearch      = true,
+-- Indentation
+opt.expandtab   = true
+opt.shiftwidth  = 2
+opt.tabstop     = 2
+opt.softtabstop = 2
+opt.smartindent = true
+opt.autoindent  = true
 
-  -- Interface
-  cmdheight      = 0,
-  completeopt    = "menuone,noinsert,noselect",
-  splitright     = true,
-  splitbelow     = true,
+-- Search
+opt.ignorecase = true
+opt.smartcase  = true
+opt.hlsearch   = true
+opt.incsearch  = true
 
-  -- Memory
-  history        = 2000,
-  undolevels     = 200,
+-- Interface
+opt.cmdheight   = 0
+opt.completeopt = { "menuone", "noinsert", "noselect" }  
+opt.splitright  = true
+opt.splitbelow  = true
 
-  -- Colors
-  termguicolors  = true,
-}
-for k, v in pairs(options) do set[k] = v end
+-- Memory
+opt.history    = 2000
+opt.undolevels = 200
 
-local window_options = {
+-- Colors
+opt.termguicolors = true
+
+-- === Window-local Defaults ===
+local win_defaults = {
   relativenumber = false,
   wrap           = false,
   linebreak      = false,
   breakindent    = false,
   signcolumn     = "yes:1",
 }
-for k, v in pairs(window_options) do wset[k] = v end
+local function apply_win_defaults(win)
+  local wo = vim.wo[win] or vim.wo
+  for k, v in pairs(win_defaults) do wo[k] = v end
+end
+apply_win_defaults(0)  -- seed the initial window
 
 -- === Disable LSP Logging ===
 pcall(vim.lsp.set_log_level, "OFF")
 
 -- === Highlight Groups ===
-local highlights = {
-  TabLine     = { fg = '#808080', bg = '#1e1e1e' },
-  TabLineSel  = { fg = '#ffffff', bg = '#3a3a3a', bold = true },
-  TabLineFill = { fg = 'NONE',    bg = '#1e1e1e' },
-}
-for name, opts in pairs(highlights) do
-  aset.nvim_set_hl(0, name, opts)
+local function apply_highlights()
+  local hl_defs = {
+    TabLine     = { fg = '#808080', bg = '#1e1e1e' },
+    TabLineSel  = { fg = '#ffffff', bg = '#3a3a3a', bold = true },
+    TabLineFill = { fg = 'NONE',    bg = '#1e1e1e' },
+  }
+  for name, opts in pairs(hl_defs) do
+    api.nvim_set_hl(0, name, opts)
+  end
 end
+apply_highlights()
+
+local augroup = api.nvim_create_augroup
+local autocmd = api.nvim_create_autocmd
+
+autocmd("ColorScheme", {
+  group    = augroup("HighlightOverrides", { clear = true }),
+  pattern  = "*",
+  callback = apply_highlights,
+})
 
 -- === Cache System ===
 -- Uses an O(1) _size counter instead of an O(n) pairs-count on every set().
@@ -129,12 +146,12 @@ Cache.__index = Cache
 
 function Cache:new(max_size, ttl)
   return setmetatable({
-    data     = {},
-    order    = {},
+    data      = {},
+    order     = {},
     key_index = {},
-    _size    = 0,
-    max_size = max_size or 100,
-    ttl      = ttl or 1000,
+    _size     = 0,
+    max_size  = max_size or 100,
+    ttl       = ttl or 1000,
   }, self)
 end
 
@@ -186,8 +203,8 @@ function Cache:set(key, value)
     self:_compact()
   end
 
-  self.data[key] = { value = value, time = now }
-  self._size = self._size + 1
+  self.data[key]      = { value = value, time = now }
+  self._size          = self._size + 1
   self.order[#self.order + 1] = key
   self.key_index[key] = #self.order
 end
@@ -202,7 +219,7 @@ function Cache:_compact()
       new_index[key] = #new_order
     end
   end
-  self.order    = new_order
+  self.order     = new_order
   self.key_index = new_index
 end
 
@@ -255,28 +272,23 @@ function RedrawScheduler:schedule(redraw_type)
       self.pending.full    = nil
 
       if needs_full then
-        cset("redraw")
+        cmd("redraw")
       elseif needs_tabline and needs_status then
-        cset("redrawtabline")
-        cset("redrawstatus")
+        cmd("redrawtabline")
+        cmd("redrawstatus")
       elseif needs_tabline then
-        cset("redrawtabline")
+        cmd("redrawtabline")
       elseif needs_status then
-        cset("redrawstatus")
+        cmd("redrawstatus")
       end
     end)
   end)
 end
 
--- RedrawScheduler is module-local; no global exposure needed.
-
 -- === Syntax Settings ===
 -- Hash sets give O(1) lookup vs O(n) tbl_contains on every FileType event.
 local syntax_fast  = { c=true, cpp=true, java=true, python=true, lua=true, javascript=true, typescript=true }
 local syntax_heavy = { json=true, yaml=true, markdown=true, text=true, plaintex=true }
-
-local augroup = aset.nvim_create_augroup
-local autocmd = aset.nvim_create_autocmd
 
 autocmd("FileType", {
   group    = augroup("PerfFileTypeHandler", { clear = true }),
@@ -287,8 +299,8 @@ autocmd("FileType", {
     if syntax_cache:get(cache_key) then return end
 
     if syntax_fast[ft] then
-      cset("syntax sync minlines=200 maxlines=500")
-    elseif syntax_heavy[ft] and fset.line("$") > 1000 then
+      cmd("syntax sync minlines=200 maxlines=500")
+    elseif syntax_heavy[ft] and fn.line("$") > 1000 then
       lset.foldmethod = "manual"
       lset.synmaxcol  = 300
       lset.wrap       = true
@@ -300,8 +312,19 @@ autocmd("FileType", {
   end,
 })
 
+-- === Apply Window Defaults to Every New Window ===
+autocmd({ "WinNew" }, {
+  group    = augroup("WinDefaultsApply", { clear = true }),
+  callback = function(args)
+    -- args.match is empty for WinNew; apply to the current window.
+    schedule(function()
+      apply_win_defaults(api.nvim_get_current_win())
+    end)
+  end,
+})
+
 -- === Arrow Key Disable ===
-local nop_opts = { desc = "Arrow Disabled" }
+local nop_opts = { desc = "Arrow Disabled", noremap = true, silent = true }
 for _, mode in ipairs({ "n", "v" }) do
   for _, arrow in ipairs({ "<Up>", "<Down>", "<Left>", "<Right>" }) do
     kset.set(mode, arrow, "<Nop>", nop_opts)
@@ -312,16 +335,22 @@ end
 -- Both transformations share one nvim_buf_get_lines call and accumulate
 -- changed lines into a single batch rather than per-line nvim_buf_set_lines
 -- calls (which would create many undo entries).
-local trim_pattern   = "^(.-)%s*$"
-local tab_pattern    = "\t"
-local tab_repl       = "  "
+local trim_pattern = "^(.-)%s*$"
+local tab_pattern  = "\t"
 
 local function clean_buffer()
-  if not bset.modifiable then return end
-  if not bset.modified   then return end
+  if not bo.modifiable then return end
+  if not bo.modified   then return end
 
-  local bufnr   = aset.nvim_get_current_buf()
-  local lines   = aset.nvim_buf_get_lines(bufnr, 0, -1, false)
+  
+  local bt = bo.buftype
+  if bt ~= "" and bt ~= "acwrite" then return end
+
+  if not bo.expandtab then return end  -- don't mangle intentional tabs
+  local tab_repl = string.rep(" ", bo.tabstop)
+
+  local bufnr         = api.nvim_get_current_buf()
+  local lines         = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local changed_ranges = {}  -- { {start, end, lines} }
 
   local run_start = nil
@@ -357,14 +386,14 @@ local function clean_buffer()
   flush_run(#lines)
 
   for _, range in ipairs(changed_ranges) do
-    aset.nvim_buf_set_lines(bufnr, range[1], range[2], false, range[3])
+    api.nvim_buf_set_lines(bufnr, range[1], range[2], false, range[3])
   end
 end
 
 local save_group = augroup("SaveHooks", { clear = true })
 autocmd("BufWritePre", {
-  group   = save_group,
-  pattern = { "*.lua", "*.c", "*.cpp", "*.py", "*.js", "*.java" },
+  group    = save_group,
+  pattern  = { "*.lua", "*.c", "*.cpp", "*.py", "*.js", "*.java" },
   callback = clean_buffer,
 })
 
@@ -373,13 +402,13 @@ autocmd("VimEnter", {
   once     = true,
   callback = function()
     defer_fn(function()
-      set.shadafile = ""
-      set.shada     = "!,'100,<50,s10,h"
-      local shada_path = fset.stdpath("data") .. "/shada/main.shada"
-      if fset.filereadable(shada_path) == 1 then
-        pcall(cset, "silent! rshada")
+      opt.shadafile = ""
+      opt.shada     = "!,'100,<50,s10,h"
+      local shada_path = fn.stdpath("data") .. "/shada/main.shada"
+      if fn.filereadable(shada_path) == 1 then
+        pcall(cmd, "silent! rshada")
       end
-      set.clipboard = "unnamedplus"
+      opt.clipboard = "unnamedplus"
     end, 100)
   end,
 })
@@ -387,11 +416,11 @@ autocmd("VimEnter", {
 -- === Search Counter ===
 _G.search_info = function()
   if vset.hlsearch == 0 then return "" end
-  local key    = fset.getreg("/")
+  local key    = fn.getreg("/")
   local cached = search_cache:get(key)
   if cached then return cached end
 
-  local ok, s  = pcall(fset.searchcount, { maxcount = 0, timeout = 100 })
+  local ok, s  = pcall(fn.searchcount, { maxcount = 0, timeout = 100 })
   local result = ""
   if ok and s and s.total and s.total > 0 then
     result = string.format(" %d/%d", s.current or 0, s.total)
@@ -411,7 +440,7 @@ local macro_group = augroup("MacroStatusline", { clear = true })
 autocmd("RecordingEnter", {
   group    = macro_group,
   callback = function()
-    macro_reg = fset.reg_recording()
+    macro_reg = fn.reg_recording()
     RedrawScheduler:schedule("status")
   end,
 })
@@ -424,14 +453,14 @@ autocmd("RecordingLeave", {
 })
 
 -- === Statusline ===
-set.statusline = "%t %y%h%m%r%=%{v:lua.macro_info()}Ln %l/%L, Col %c%{v:lua.search_info()} %P"
+vim.o.statusline = "%t %y%h%m%r%=%{v:lua.macro_info()}Ln %l/%L, Col %c%{v:lua.search_info()} %P"
 
 -- === Clear Highlight ===
 local function clear_hlsearch()
   if vset.hlsearch == 1 then
-    cset("nohlsearch")
+    cmd("nohlsearch")
     -- Invalidate only the active pattern; other cached counts remain valid.
-    search_cache:_remove_key(fset.getreg("/"))
+    search_cache:_remove_key(fn.getreg("/"))
   end
 end
 
@@ -446,7 +475,7 @@ kset.set("n", "<Esc>", function()
 end, { expr = true, silent = true, noremap = true })
 
 -- === Zen Mode ===
-local zen_state_file  = vim.fn.stdpath("data") .. "/zen_mode_state"
+local zen_state_file  = fn.stdpath("data") .. "/zen_mode_state"
 local zen_state_cache = nil
 
 local ZenMode = {
@@ -472,7 +501,6 @@ local ZenMode = {
   global_opts = { "showcmd", "laststatus", "cmdheight", "showmode", "ruler" },
 }
 
--- Build an O(1) lookup set for global_opts (fixes the original array-as-map bug).
 local _zen_global_opt_set = {}
 for _, k in ipairs(ZenMode.global_opts) do _zen_global_opt_set[k] = true end
 
@@ -518,26 +546,24 @@ local function load_zen_state_sync()
 end
 
 -- === Batch Window Operations ===
--- FIX: previously used ZenMode.global_opts (an array) as a map, so string key
--- lookups always returned nil and global options were never applied.
--- Now uses _zen_global_opt_set for correct O(1) dispatch.
+-- Uses _zen_global_opt_set for correct O(1) dispatch.
 local function batch_apply_settings(settings, is_global)
   if is_global then
     for k, v in pairs(settings) do
       if k == "syntax" then
-        cset(v and "syntax on" or "syntax off")
+        cmd(v and "syntax on" or "syntax off")
       elseif _zen_global_opt_set[k] then
-        set[k] = v
+        vim.o[k] = v
       end
     end
   end
 
-  local wins = aset.nvim_list_wins()
+  local wins = api.nvim_list_wins()
   for _, win in ipairs(wins) do
-    aset.nvim_win_call(win, function()
-      for _, opt in ipairs(ZenMode.window_opts) do
-        if settings[opt] ~= nil then
-          wset[opt] = settings[opt]
+    api.nvim_win_call(win, function()
+      for _, opt_name in ipairs(ZenMode.window_opts) do
+        if settings[opt_name] ~= nil then
+          vim.wo[opt_name] = settings[opt_name]
         end
       end
     end)
@@ -547,20 +573,20 @@ end
 -- === Zen State Snapshot (deduplicated helper) ===
 local function capture_zen_snapshot()
   return {
-    syntax       = set.syntax ~= "off",
-    number       = wset.number,
-    showcmd      = set.showcmd,
-    laststatus   = set.laststatus,
-    cmdheight    = set.cmdheight,
-    signcolumn   = wset.signcolumn,
-    cursorline   = wset.cursorline,
-    cursorcolumn = wset.cursorcolumn,
-    list         = wset.list,
-    showmode     = set.showmode,
-    ruler        = set.ruler,
-    spell        = wset.spell,
-    status_hl    = aset.nvim_get_hl(0, { name = "StatusLine", link = false }),
-    statusline   = set.statusline,
+    syntax       = vim.o.syntax ~= "off",
+    number       = vim.wo.number,
+    showcmd      = vim.o.showcmd,
+    laststatus   = vim.o.laststatus,
+    cmdheight    = vim.o.cmdheight,
+    signcolumn   = vim.wo.signcolumn,
+    cursorline   = vim.wo.cursorline,
+    cursorcolumn = vim.wo.cursorcolumn,
+    list         = vim.wo.list,
+    showmode     = vim.o.showmode,
+    ruler        = vim.o.ruler,
+    spell        = vim.wo.spell,
+    status_hl    = api.nvim_get_hl(0, { name = "StatusLine", link = false }),
+    statusline   = vim.o.statusline,
   }
 end
 
@@ -568,8 +594,8 @@ end
 local tab_cache = Cache:new(5, 200)
 
 function _G.tabline_numbers()
-  local current   = fset.tabpagenr()
-  local total     = fset.tabpagenr('$')
+  local current   = fn.tabpagenr()
+  local total     = fn.tabpagenr('$')
   local cache_key = current .. "_" .. total .. "_" .. (ZenMode.active and "z" or "n")
 
   local cached = tab_cache:get(cache_key)
@@ -581,12 +607,12 @@ function _G.tabline_numbers()
     parts[#parts + 1] = ' ' .. tostring(i) .. ' '
 
     if not ZenMode.active then
-      local buflist = fset.tabpagebuflist(i)
-      local winnr   = fset.tabpagewinnr(i)
+      local buflist = fn.tabpagebuflist(i)
+      local winnr   = fn.tabpagewinnr(i)
       local bufnr   = buflist[winnr] or 0
-      if fset.bufexists(bufnr) == 1 then
-        local mod  = (fset.getbufvar(bufnr, '&modified') == 1) and '+' or ''
-        local name = fset.fnamemodify(fset.bufname(bufnr), ':t')
+      if fn.bufexists(bufnr) == 1 then
+        local mod  = (fn.getbufvar(bufnr, '&modified') == 1) and '+' or ''
+        local name = fn.fnamemodify(fn.bufname(bufnr), ':t')
         name = (name ~= "") and name or '[No Name]'
         parts[#parts + 1] = ':' .. name .. mod
       end
@@ -601,7 +627,7 @@ function _G.tabline_numbers()
   return result
 end
 
-set.tabline = '%!v:lua.tabline_numbers()'
+vim.o.tabline = '%!v:lua.tabline_numbers()'
 
 -- === Zen Statusline ===
 function _G.zen_statusline() return "~" end
@@ -609,18 +635,18 @@ function _G.zen_statusline() return "~" end
 -- === Toggle Zen Mode ===
 local function toggle_zen_mode()
   if ZenMode._busy then return end
-  ZenMode._busy = true
+  ZenMode._busy  = true
   ZenMode.active = not ZenMode.active
 
   if ZenMode.active then
     ZenMode.saved = capture_zen_snapshot()
     batch_apply_settings(ZenMode.config, true)
-    aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
-    set.statusline = "%!v:lua.zen_statusline()"
+    api.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
+    vim.o.statusline = "%!v:lua.zen_statusline()"
   else
     batch_apply_settings(ZenMode.saved, true)
-    if ZenMode.saved.status_hl  then aset.nvim_set_hl(0, "StatusLine", ZenMode.saved.status_hl) end
-    if ZenMode.saved.statusline then set.statusline = ZenMode.saved.statusline end
+    if ZenMode.saved.status_hl  then api.nvim_set_hl(0, "StatusLine", ZenMode.saved.status_hl) end
+    if ZenMode.saved.statusline then vim.o.statusline = ZenMode.saved.statusline end
     ZenMode.saved = {}
   end
 
@@ -640,8 +666,8 @@ kset.set("n", "<Space><Space>", toggle_zen_mode, {
 })
 
 -- === Auto-apply Zen Settings to New Windows ===
-local zen_group           = augroup("ZenModeAuto", { clear = true })
-local zen_apply_pending   = false
+local zen_group         = augroup("ZenModeAuto", { clear = true })
+local zen_apply_pending = false
 
 autocmd({ "WinNew", "WinEnter", "BufWinEnter" }, {
   group    = zen_group,
@@ -649,9 +675,9 @@ autocmd({ "WinNew", "WinEnter", "BufWinEnter" }, {
     if ZenMode.active and not zen_apply_pending then
       zen_apply_pending = true
       schedule(function()
-        for _, opt in ipairs(ZenMode.window_opts) do
-          if ZenMode.config[opt] ~= nil then
-            wset[opt] = ZenMode.config[opt]
+        for _, opt_name in ipairs(ZenMode.window_opts) do
+          if ZenMode.config[opt_name] ~= nil then
+            vim.wo[opt_name] = ZenMode.config[opt_name]
           end
         end
         zen_apply_pending = false
@@ -669,8 +695,8 @@ autocmd("VimEnter", {
         ZenMode.saved  = capture_zen_snapshot()
         ZenMode.active = true
         batch_apply_settings(ZenMode.config, true)
-        aset.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
-        set.statusline = "%!v:lua.zen_statusline()"
+        api.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
+        vim.o.statusline = "%!v:lua.zen_statusline()"
         schedule(function() RedrawScheduler:schedule("tabline") end)
       end
     end, 150)
@@ -697,10 +723,17 @@ local function run_gc()
   tab_cache:gc()
 end
 
+local _gc_cooldown = false
 autocmd("FocusLost", {
   callback = function()
     run_gc()
-    collectgarbage("collect")
+    if not _gc_cooldown then
+      _gc_cooldown = true
+      defer_fn(function()
+        collectgarbage("collect")
+        _gc_cooldown = false
+      end, 10000)  -- 10s cooldown between forced GC cycles
+    end
   end,
 })
 
