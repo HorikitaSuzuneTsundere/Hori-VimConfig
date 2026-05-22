@@ -342,6 +342,28 @@ local syntax_heavy = {
   markdown=true, text=true, plaintex=true,
   html=true, css=true, scss=true, xml=true,
 }
+local heavy_buffers = {}
+local heavy_window_opts = {
+  foldmethod  = "manual",
+  wrap        = true,
+  linebreak   = true,
+  breakindent = true,
+}
+
+local function mark_heavy_buffer(buf)
+  heavy_buffers[buf] = true
+  api.nvim_set_option_value("synmaxcol", 120, { buf = buf })
+end
+
+local function apply_heavy_window_settings(win)
+  if not api.nvim_win_is_valid(win) then return end
+  local buf = api.nvim_win_get_buf(win)
+  if not heavy_buffers[buf] then return end
+  local wopts = { win = win }
+  for k, v in pairs(heavy_window_opts) do
+    api.nvim_set_option_value(k, v, wopts)
+  end
+end
 
 autocmd("FileType", {
   group    = augroup("PerfFileTypeHandler", { clear = true }),
@@ -365,13 +387,8 @@ autocmd("FileType", {
       -- nvim_buf_line_count: native API equivalent of fn.line("$");
       -- avoids the vimscript bridge on every FileType event.
       if api.nvim_buf_line_count(buf) > 1000 then
-        api.nvim_set_option_value("foldmethod", "manual", { win = 0 })
-        -- Tighten synmaxcol for large heavy files (performance). The original
-        -- set it to 300, wider than the global 200 — incorrect direction.
-        api.nvim_set_option_value("synmaxcol",   120,  { buf = buf })
-        api.nvim_set_option_value("wrap",        true, { win = 0 })
-        api.nvim_set_option_value("linebreak",   true, { win = 0 })
-        api.nvim_set_option_value("breakindent", true, { win = 0 })
+        mark_heavy_buffer(buf)
+        apply_heavy_window_settings(api.nvim_get_current_win())
       end
     end
 
@@ -386,6 +403,7 @@ autocmd("FileType", {
 autocmd({ "BufDelete", "BufWipeout" }, {
   group    = augroup("SyntaxCacheEvict", { clear = true }),
   callback = function(args)
+    heavy_buffers[args.buf] = nil
     local buf_suffix = "\0" .. tostring(args.buf)
     local to_del = {}
     for key in pairs(syntax_cache.data) do
@@ -415,6 +433,12 @@ local function setup_window(win)
   for k, v in pairs(win_defaults) do
     api.nvim_set_option_value(k, v, wopts)
   end
+  api.nvim_set_option_value(
+    "foldmethod",
+    api.nvim_get_option_value("foldmethod", { scope = "global" }),
+    wopts
+  )
+  apply_heavy_window_settings(win)
   -- If zen is active, layer its per-window overrides on top of base defaults.
   if _G.zen_mode and _G.zen_mode.active then
     for _, opt_name in ipairs(_G.zen_mode.window_opts) do
@@ -428,11 +452,21 @@ end
 
 setup_window(api.nvim_get_current_win())  -- seed the initial window
 
+local win_setup_group = augroup("WinSetup", { clear = true })
+
 autocmd("WinNew", {
-  group    = augroup("WinSetup", { clear = true }),
+  group    = win_setup_group,
   callback = function()
     -- schedule(): WinNew fires before the window is fully initialised.
-    schedule(function() setup_window(api.nvim_get_current_win()) end)
+    local win = api.nvim_get_current_win()
+    schedule(function() setup_window(win) end)
+  end,
+})
+
+autocmd("BufWinEnter", {
+  group    = win_setup_group,
+  callback = function()
+    setup_window(api.nvim_get_current_win())
   end,
 })
 
@@ -538,18 +572,21 @@ autocmd("BufWritePre", {
 })
 
 -- === Search Counter ===
--- Cache key includes the cursor line so searchcount's current-match index is
--- always accurate. The original keyed only on the pattern, returning a stale
--- "3/10" after cursor movement within the same search session.
-_G.search_info = function()
-  if vset.hlsearch == 0 then return "" end
+-- Cache key includes the full cursor position so same-line movement across
+-- multiple matches cannot reuse a stale searchcount() result.
+local function get_search_cache_key()
   local pattern = fn.getreg("/")
-  local line    = api.nvim_win_get_cursor(0)[1]  -- 1-indexed cursor line
-  local key     = pattern .. "\0" .. line         -- \0 cannot appear in a pattern
-  local cached  = search_cache:get(key)
+  local cursor  = api.nvim_win_get_cursor(0)
+  return pattern, pattern .. "\0" .. cursor[1] .. "\0" .. cursor[2]
+end
+
+local function get_search_count_display()
+  if vset.hlsearch == 0 then return "" end
+  local _, key = get_search_cache_key()
+  local cached = search_cache:get(key)
   if cached then return cached end
 
-  local ok, s  = pcall(fn.searchcount, _searchcount_opts)
+  local ok, s = pcall(fn.searchcount, _searchcount_opts)
   local result = ""
   if ok and s and s.total and s.total > 0 then
     result = string.format(" %d/%d", s.current or 0, s.total)
@@ -557,6 +594,8 @@ _G.search_info = function()
   search_cache:set(key, result)
   return result
 end
+
+_G.search_info = function() return get_search_count_display() end
 
 -- === Macro Recording Indicator ===
 -- _macro_display is pre-computed once on RecordingEnter so that the hot
@@ -605,19 +644,9 @@ _G.statusline_render = function()
   -- Cursor position
   parts[#parts + 1] = "Ln %l/%L, Col %c"
 
-  -- Search count (cursor-keyed cache; inlined to avoid a second bridge call)
+  -- Search count (cursor-keyed cache shared with _G.search_info)
   if vset.hlsearch == 1 then
-    local pattern = fn.getreg("/")
-    local line    = api.nvim_win_get_cursor(0)[1]
-    local key     = pattern .. "\0" .. line
-    local count   = search_cache:get(key)
-    if not count then
-      local ok, s = pcall(fn.searchcount, _searchcount_opts)
-      count = (ok and s and s.total and s.total > 0)
-              and string.format(" %d/%d", s.current or 0, s.total)
-              or  ""
-      search_cache:set(key, count)
-    end
+    local count = get_search_count_display()
     if count ~= "" then parts[#parts + 1] = count end
   end
 
@@ -633,7 +662,7 @@ vim.o.statusline = "%!v:lua.statusline_render()"
 local function clear_hlsearch()
   if vset.hlsearch == 1 then
     cmd("nohlsearch")
-    -- Keys are stored as pattern.."\0"..line, so we must scan for all
+    -- Keys are stored as pattern.."\0"..line.."\0"..col, so we must scan for all
     -- entries whose prefix matches the active pattern. A bare-pattern
     -- lookup would never hit any key and silently no-op.
     local prefix = fn.getreg("/") .. "\0"
@@ -679,7 +708,7 @@ local ZenMode = {
     ruler        = false,
     spell        = false,
   },
-  -- Separated into arrays so batch_apply_settings can dispatch correctly.
+  -- Separate option lists keep global and window restores explicit.
   window_opts = { "number", "signcolumn", "cursorline", "cursorcolumn", "list", "spell" },
   global_opts = { "showcmd", "laststatus", "cmdheight", "showmode", "ruler" },
 }
@@ -691,27 +720,7 @@ for _, k in ipairs(ZenMode.global_opts) do _zen_global_opt_set[k] = true end
 -- JSON format replaces the raw "0"/"1" byte so future fields (e.g., saved
 -- window width, colorscheme override) can be added without a format break.
 -- A legacy fallback in load_zen_state_sync handles existing "1"/"0" files.
--- Guards against concurrent async writes racing each other. If a write is
--- already in flight, the newer call is dropped; VimLeavePre always uses the
--- synchronous variant, so the final state on exit is always correct.
-local _zen_write_inflight = false
-
-local function save_zen_state_async()
-  zen_state_cache = ZenMode.active
-  if _zen_write_inflight then return end
-  _zen_write_inflight = true
-  local data = vim.json.encode({ active = ZenMode.active })
-  uv.fs_open(zen_state_file, "w", 438, function(err, fd)
-    _zen_write_inflight = false
-    if err or not fd then return end
-    uv.fs_write(fd, data, 0, function()
-      uv.fs_close(fd, function() end)
-    end)
-  end)
-end
-
--- Synchronous variant for VimLeavePre: async callbacks may never fire
--- if Neovim exits before the event loop gets control back.
+-- The payload is tiny, so writes stay synchronous for deterministic ordering.
 local function save_zen_state_sync()
   zen_state_cache = ZenMode.active
   local fd = uv.fs_open(zen_state_file, "w", 438)
@@ -746,47 +755,101 @@ end
 -- === Batch Window Operations ===
 -- nvim_win_is_valid() guard prevents errors when a window closes between
 -- nvim_list_wins() and the inner set loop (e.g., during plugin startup chains).
-local function batch_apply_settings(settings, is_global)
-  if is_global then
-    for k, v in pairs(settings) do
-      if k == "syntax" then
-        cmd(v and "syntax on" or "syntax off")
-      elseif _zen_global_opt_set[k] then
-        vim.o[k] = v
-      end
-    end
-  end
-  for _, win in ipairs(api.nvim_list_wins()) do
-    if api.nvim_win_is_valid(win) then
-      local wopts = { win = win }
-      for _, opt_name in ipairs(ZenMode.window_opts) do
-        local val = settings[opt_name]
-        if val ~= nil then
-          api.nvim_set_option_value(opt_name, val, wopts)
-        end
-      end
+local function apply_global_settings(settings)
+  for k, v in pairs(settings) do
+    if k == "syntax" then
+      cmd(v and "syntax on" or "syntax off")
+    elseif _zen_global_opt_set[k] then
+      vim.o[k] = v
     end
   end
 end
 
+local function apply_window_settings(win, settings)
+  if not api.nvim_win_is_valid(win) then return end
+  local wopts = { win = win }
+  for _, opt_name in ipairs(ZenMode.window_opts) do
+    local val = settings[opt_name]
+    if val ~= nil then
+      api.nvim_set_option_value(opt_name, val, wopts)
+    end
+  end
+end
+
+local function apply_settings_to_all_windows(settings)
+  for _, win in ipairs(api.nvim_list_wins()) do
+    apply_window_settings(win, settings)
+  end
+end
+
 -- === Zen State Snapshot ===
-local function capture_zen_snapshot()
+local function capture_window_snapshot(win)
+  if not api.nvim_win_is_valid(win) then return {} end
   return {
-    syntax       = vim.o.syntax ~= "off",
-    number       = vim.wo.number,
-    showcmd      = vim.o.showcmd,
-    laststatus   = vim.o.laststatus,
-    cmdheight    = vim.o.cmdheight,
-    signcolumn   = vim.wo.signcolumn,
-    cursorline   = vim.wo.cursorline,
-    cursorcolumn = vim.wo.cursorcolumn,
-    list         = vim.wo.list,
-    showmode     = vim.o.showmode,
-    ruler        = vim.o.ruler,
-    spell        = vim.wo.spell,
-    status_hl    = api.nvim_get_hl(0, { name = "StatusLine", link = false }),
-    statusline   = vim.o.statusline,
+    number       = api.nvim_get_option_value("number",       { win = win }),
+    signcolumn   = api.nvim_get_option_value("signcolumn",   { win = win }),
+    cursorline   = api.nvim_get_option_value("cursorline",   { win = win }),
+    cursorcolumn = api.nvim_get_option_value("cursorcolumn", { win = win }),
+    list         = api.nvim_get_option_value("list",         { win = win }),
+    spell        = api.nvim_get_option_value("spell",        { win = win }),
   }
+end
+
+local function capture_zen_snapshot()
+  local windows = {}
+  for _, win in ipairs(api.nvim_list_wins()) do
+    if api.nvim_win_is_valid(win) then
+      windows[win] = capture_window_snapshot(win)
+    end
+  end
+  return {
+    global = {
+      syntax     = vim.o.syntax ~= "off",
+      showcmd    = vim.o.showcmd,
+      laststatus = vim.o.laststatus,
+      cmdheight  = vim.o.cmdheight,
+      showmode   = vim.o.showmode,
+      ruler      = vim.o.ruler,
+      status_hl  = api.nvim_get_hl(0, { name = "StatusLine", link = false }),
+      statusline = vim.o.statusline,
+    },
+    windows = windows,
+  }
+end
+
+local function restore_zen_windows(saved_windows)
+  for _, win in ipairs(api.nvim_list_wins()) do
+    local saved = saved_windows[win]
+    if saved then
+      apply_window_settings(win, saved)
+    else
+      setup_window(win)
+    end
+  end
+end
+
+local function enter_zen_mode()
+  ZenMode.saved = capture_zen_snapshot()
+  ZenMode.active = true
+  apply_global_settings(ZenMode.config)
+  apply_settings_to_all_windows(ZenMode.config)
+  api.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
+  vim.o.statusline = "%!v:lua.zen_statusline()"
+end
+
+local function leave_zen_mode()
+  local saved = ZenMode.saved
+  local global = saved.global or {}
+  ZenMode.active = false
+  apply_global_settings(global)
+  restore_zen_windows(saved.windows or {})
+  if global.status_hl then
+    api.nvim_set_hl(0, "StatusLine", global.status_hl)
+  end
+  if global.statusline then
+    vim.o.statusline = global.statusline
+  end
+  ZenMode.saved = {}
 end
 
 -- === Tabline ===
@@ -831,28 +894,31 @@ end
 
 vim.o.tabline = '%!v:lua.tabline_numbers()'
 
+local function invalidate_tabline()
+  tab_cache:clear()
+  schedule_redraw(REDRAW_TABLINE)
+end
+
+autocmd({ "BufEnter", "WinEnter", "BufModifiedSet", "BufWritePost", "BufFilePost" }, {
+  group    = augroup("TablineCacheInvalidate", { clear = true }),
+  callback = invalidate_tabline,
+})
+
 -- === Zen Statusline ===
 function _G.zen_statusline() return "~" end
 
 -- === Toggle Zen Mode ===
 local function toggle_zen_mode()
   if ZenMode._busy then return end
-  ZenMode._busy  = true
-  ZenMode.active = not ZenMode.active
+  ZenMode._busy = true
 
   if ZenMode.active then
-    ZenMode.saved = capture_zen_snapshot()
-    batch_apply_settings(ZenMode.config, true)
-    api.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
-    vim.o.statusline = "%!v:lua.zen_statusline()"
+    leave_zen_mode()
   else
-    batch_apply_settings(ZenMode.saved, true)
-    if ZenMode.saved.status_hl  then api.nvim_set_hl(0, "StatusLine", ZenMode.saved.status_hl) end
-    if ZenMode.saved.statusline then vim.o.statusline = ZenMode.saved.statusline end
-    ZenMode.saved = {}
+    enter_zen_mode()
   end
 
-  save_zen_state_async()
+  save_zen_state_sync()
   tab_cache:clear()
 
   schedule(function()
@@ -900,11 +966,7 @@ autocmd("VimEnter", {
       -- Phase 2: zen restore chained immediately after phase 1.
       schedule(function()
         if load_zen_state_sync() and not ZenMode.active then
-          ZenMode.saved  = capture_zen_snapshot()
-          ZenMode.active = true
-          batch_apply_settings(ZenMode.config, true)
-          api.nvim_set_hl(0, "StatusLine", { bg = "NONE", fg = "#4F5258", bold = false })
-          vim.o.statusline = "%!v:lua.zen_statusline()"
+          enter_zen_mode()
           schedule(function() schedule_redraw(REDRAW_TABLINE) end)
         end
       end)
