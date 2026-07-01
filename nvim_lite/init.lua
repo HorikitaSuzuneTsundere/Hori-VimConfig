@@ -1,4 +1,5 @@
 -- === Neovim 0.12+ Configuration ===
+if vim.loader then vim.loader.enable() end
 
 -- === Localized References ===
 local opt      = vim.opt
@@ -14,6 +15,10 @@ local schedule = vim.schedule
 local uv       = vim.uv
 -- Localized to avoid repeated global-chain lookups on hot-path events.
 local ts_get_parser = vim.treesitter.get_parser
+
+local tbl_concat = table.concat
+local str_format = string.format
+local str_rep    = string.rep
 
 -- === Shutdown Flag ===
 -- Set in VimLeavePre before timers are closed. Every timer start site checks
@@ -125,17 +130,20 @@ pcall(vim.lsp.log.set_level, "OFF")
 -- Branches on vim.o.background so colours remain legible on light themes.
 -- The ColorScheme callback is deferred by one schedule() tick to let the theme
 -- finish applying before we override specific groups.
+local dark_hl_defs = {
+  TabLine     = { fg = '#808080', bg = '#1e1e1e' },
+  TabLineSel  = { fg = '#ffffff', bg = '#3a3a3a', bold = true },
+  TabLineFill = { fg = 'NONE',    bg = '#1e1e1e' },
+}
+local light_hl_defs = {
+  TabLine     = { fg = '#555555', bg = '#d4d4d4' },
+  TabLineSel  = { fg = '#000000', bg = '#ffffff', bold = true },
+  TabLineFill = { fg = 'NONE',    bg = '#d4d4d4' },
+}
+
 local function apply_highlights()
   local is_dark = vim.o.background ~= "light"
-  local hl_defs = is_dark and {
-    TabLine     = { fg = '#808080', bg = '#1e1e1e' },
-    TabLineSel  = { fg = '#ffffff', bg = '#3a3a3a', bold = true },
-    TabLineFill = { fg = 'NONE',    bg = '#1e1e1e' },
-  } or {
-    TabLine     = { fg = '#555555', bg = '#d4d4d4' },
-    TabLineSel  = { fg = '#000000', bg = '#ffffff', bold = true },
-    TabLineFill = { fg = 'NONE',    bg = '#d4d4d4' },
-  }
+  local hl_defs = is_dark and dark_hl_defs or light_hl_defs
   for name, opts in pairs(hl_defs) do
     api.nvim_set_hl(0, name, opts)
   end
@@ -167,8 +175,10 @@ Cache.__index = Cache
 function Cache:new(max_size, ttl)
   return setmetatable({
     data       = {},
+    time       = {},
     order      = {},
     key_index  = {},
+    scratch    = {},
     _size      = 0,
     _order_len = 0,   -- explicit length; never trust # on the sparse order array
     max_size   = max_size or 100,
@@ -177,20 +187,21 @@ function Cache:new(max_size, ttl)
 end
 
 function Cache:get(key)
-  local entry = self.data[key]
-  if not entry then return nil end
-  if (uv.now() - entry.time) > self.ttl then
+  local value = self.data[key]
+  if value == nil then return nil end
+  if (uv.now() - self.time[key]) > self.ttl then
     self:_remove_key(key)
     return nil
   end
-  return entry.value
+  return value
 end
 
 -- Internal: removes from data + key_index, leaves a nil hole in order.
 -- Holes are compacted in bulk by _compact() to avoid O(n) work per removal.
 function Cache:_remove_key(key)
-  if not self.data[key] then return end
+  if self.data[key] == nil then return end
   self.data[key] = nil
+  self.time[key] = nil
   self._size     = self._size - 1
   local idx = self.key_index[key]
   if idx then
@@ -207,9 +218,10 @@ function Cache:invalidate(key) self:_remove_key(key) end
 function Cache:set(key, value)
   local now = uv.now()
 
-  if self.data[key] then
+  if self.data[key] ~= nil then
     -- Update in place; position in order is unchanged.
-    self.data[key] = { value = value, time = now }
+    self.data[key] = value
+    self.time[key] = now
     return
   end
 
@@ -229,7 +241,8 @@ function Cache:set(key, value)
     self:_compact()
   end
 
-  self.data[key]              = { value = value, time = now }
+  self.data[key]              = value
+  self.time[key]              = now
   self._size                  = self._size + 1
   self._order_len             = self._order_len + 1
   self.order[self._order_len] = key
@@ -244,7 +257,7 @@ function Cache:_compact()
   local write = 0
   for i = 1, self._order_len do
     local key = order[i]
-    if key and self.data[key] then
+    if key and self.data[key] ~= nil then
       write          = write + 1
       order[write]   = key
       key_index[key] = write
@@ -257,22 +270,29 @@ end
 
 function Cache:clear()
   self.data       = {}
+  self.time       = {}
   self.order      = {}
   self.key_index  = {}
+  self.scratch    = {}
   self._size      = 0
   self._order_len = 0
 end
 
 function Cache:gc()
   local now     = uv.now()
-  local expired = {}
-  for key, entry in pairs(self.data) do
-    if (now - entry.time) > self.ttl then
-      expired[#expired + 1] = key
+  local expired = self.scratch
+  local n       = 0
+  for key, t in pairs(self.time) do
+    if (now - t) > self.ttl then
+      n = n + 1
+      expired[n] = key
     end
   end
-  for _, key in ipairs(expired) do self:_remove_key(key) end
-  if #expired > 0 then self:_compact() end
+  for i = 1, n do
+    self:_remove_key(expired[i])
+    expired[i] = nil
+  end
+  if n > 0 then self:_compact() end
 end
 
 -- === Global Caches ===
@@ -302,6 +322,8 @@ local _redraw_pending = 0
 local _redraw_delay   = 16   -- ms; ~one frame at 60 Hz
 
 local function _do_redraw()
+  if _shutting_down then return end   -- in-flight schedule()d callbacks must not
+                                      -- issue commands while Neovim is tearing down
   local p         = _redraw_pending
   _redraw_pending = 0
   if p == 0 then return end
@@ -399,19 +421,26 @@ autocmd("FileType", {
 -- Evict syntax cache entries when a buffer is deleted or wiped.
 -- BufDelete covers :bdelete; BufWipeout covers :bwipeout and plugin-created
 -- scratch buffers, both of which can immediately reuse the buffer number and
--- would get a false cache hit on the next FileType event.
-autocmd({ "BufDelete", "BufWipeout" }, {
+-- would get a false cache hit on the next FileType event. BufUnload is added
+-- as a broader catch-all for plugin APIs that wipe buffers without firing the
+-- two narrower events, preventing heavy_buffers from holding dangling markers.
+autocmd({ "BufDelete", "BufWipeout", "BufUnload" }, {
   group    = augroup("SyntaxCacheEvict", { clear = true }),
   callback = function(args)
     heavy_buffers[args.buf] = nil
     local buf_suffix = "\0" .. tostring(args.buf)
-    local to_del = {}
+    local to_del = syntax_cache.scratch
+    local n = 0
     for key in pairs(syntax_cache.data) do
       if key:sub(-#buf_suffix) == buf_suffix then
-        to_del[#to_del + 1] = key
+        n = n + 1
+        to_del[n] = key
       end
     end
-    for _, k in ipairs(to_del) do syntax_cache:invalidate(k) end
+    for i = 1, n do
+      syntax_cache:invalidate(to_del[i])
+      to_del[i] = nil
+    end
   end,
 })
 
@@ -492,6 +521,7 @@ end
 --     passing to nvim_buf_set_lines.
 local trim_pattern = "^(.-)%s*$"
 local tab_pattern  = "\t"
+local trail_pattern = "%s$"
 
 local _cb_ranges     = {}   -- { {start_0idx, end_0idx_excl, lines_snapshot} }
 local _cb_ranges_len = 0
@@ -502,8 +532,14 @@ local _cb_run_start  = nil  -- 0-indexed inclusive start of current run, or nil
 local function _cb_flush(end_excl)
   if not _cb_run_start then return end
   -- Snapshot the current run: _cb_run_lines will be reused for the next run.
+  -- Nil out each slot after copying so the GC can collect the strings
+  -- immediately rather than holding them until the slot is overwritten
+  -- by a future save (high-watermark leak fix).
   local snapshot = {}
-  for i = 1, _cb_run_len do snapshot[i] = _cb_run_lines[i] end
+  for i = 1, _cb_run_len do
+    snapshot[i]      = _cb_run_lines[i]
+    _cb_run_lines[i] = nil
+  end
   _cb_ranges_len             = _cb_ranges_len + 1
   _cb_ranges[_cb_ranges_len] = { _cb_run_start, end_excl, snapshot }
   _cb_run_start = nil
@@ -522,7 +558,7 @@ local function clean_buffer()
   local bufnr = api.nvim_get_current_buf()
   if api.nvim_buf_line_count(bufnr) > MAX_CLEAN_LINES then return end
 
-  local tab_repl = string.rep(" ", bo.tabstop)
+  local tab_repl = str_rep(" ", bo.tabstop)
   local lines    = api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   -- Reset scratch state (no allocation).
@@ -531,10 +567,14 @@ local function clean_buffer()
   _cb_run_len    = 0
 
   for i, l in ipairs(lines) do
-    local new_line = l:match(trim_pattern)
+    local has_tab = l:find(tab_pattern, 1, true)
+    local new_line = l
+    if l:find(trail_pattern) then
+      new_line = l:match(trim_pattern)
+    end
     -- find() guard before gsub(): on files where most lines are tab-free,
     -- skipping gsub() avoids one string operation per tab-free line.
-    if new_line:find(tab_pattern, 1, true) then
+    if has_tab then
       new_line = new_line:gsub(tab_pattern, tab_repl)
     end
     if new_line ~= l then
@@ -550,7 +590,9 @@ local function clean_buffer()
   for i = 1, _cb_ranges_len do
     local r = _cb_ranges[i]
     api.nvim_buf_set_lines(bufnr, r[1], r[2], false, r[3])
+    _cb_ranges[i] = nil   -- release snapshot; prevents ghost refs between saves
   end
+  _cb_ranges_len = 0
 end
 
 local save_group = augroup("SaveHooks", { clear = true })
@@ -577,19 +619,19 @@ autocmd("BufWritePre", {
 local function get_search_cache_key()
   local pattern = fn.getreg("/")
   local cursor  = api.nvim_win_get_cursor(0)
-  return pattern, pattern .. "\0" .. cursor[1] .. "\0" .. cursor[2]
+  return pattern .. "\0" .. cursor[1] .. "\0" .. cursor[2]
 end
 
 local function get_search_count_display()
   if vset.hlsearch == 0 then return "" end
-  local _, key = get_search_cache_key()
+  local key = get_search_cache_key()
   local cached = search_cache:get(key)
   if cached then return cached end
 
   local ok, s = pcall(fn.searchcount, _searchcount_opts)
   local result = ""
   if ok and s and s.total and s.total > 0 then
-    result = string.format(" %d/%d", s.current or 0, s.total)
+    result = str_format(" %d/%d", s.current or 0, s.total)
   end
   search_cache:set(key, result)
   return result
@@ -627,33 +669,44 @@ autocmd("RecordingLeave", {
 -- (%{v:lua.macro_info()} and %{v:lua.search_info()}) on every evaluation.
 -- search_info logic is inlined here; the _G.search_info global is kept for
 -- external compatibility but is no longer invoked by the statusline itself.
+local _status_parts = {}
 _G.statusline_render = function()
-  local parts = {}
+  local parts = _status_parts
+  local n = 0
 
   -- Left: file name + type flags
-  parts[#parts + 1] = "%t %y%h%m%r"
+  n = n + 1
+  parts[n] = "%t %y%h%m%r"
 
   -- Right-align separator
-  parts[#parts + 1] = "%="
+  n = n + 1
+  parts[n] = "%="
 
   -- Macro indicator (pre-computed string; zero allocation on render)
   if _macro_display ~= "" then
-    parts[#parts + 1] = _macro_display
+    n = n + 1
+    parts[n] = _macro_display
   end
 
   -- Cursor position
-  parts[#parts + 1] = "Ln %l/%L, Col %c"
+  n = n + 1
+  parts[n] = "Ln %l/%L, Col %c"
 
   -- Search count (cursor-keyed cache shared with _G.search_info)
   if vset.hlsearch == 1 then
     local count = get_search_count_display()
-    if count ~= "" then parts[#parts + 1] = count end
+    if count ~= "" then
+      n = n + 1
+      parts[n] = count
+    end
   end
 
   -- Scroll percentage
-  parts[#parts + 1] = " %P"
+  n = n + 1
+  parts[n] = " %P"
+  parts[n + 1] = nil
 
-  return table.concat(parts)
+  return tbl_concat(parts, "", 1, n)
 end
 
 vim.o.statusline = "%!v:lua.statusline_render()"
@@ -666,13 +719,18 @@ local function clear_hlsearch()
     -- entries whose prefix matches the active pattern. A bare-pattern
     -- lookup would never hit any key and silently no-op.
     local prefix = fn.getreg("/") .. "\0"
-    local to_del = {}
+    local to_del = search_cache.scratch
+    local n = 0
     for k in pairs(search_cache.data) do
       if k:sub(1, #prefix) == prefix then
-        to_del[#to_del + 1] = k
+        n = n + 1
+        to_del[n] = k
       end
     end
-    for _, k in ipairs(to_del) do search_cache:invalidate(k) end
+    for i = 1, n do
+      search_cache:invalidate(to_del[i])
+      to_del[i] = nil
+    end
   end
 end
 
@@ -725,7 +783,10 @@ local function save_zen_state_sync()
   zen_state_cache = ZenMode.active
   local fd = uv.fs_open(zen_state_file, "w", 438)
   if not fd then return end
-  uv.fs_write(fd, vim.json.encode({ active = ZenMode.active }), 0)
+  -- pcall guard: if encode throws (memory pressure, etc.) the fd is still
+  -- closed below rather than leaked for the rest of the session.
+  local ok, payload = pcall(vim.json.encode, { active = ZenMode.active })
+  if ok then uv.fs_write(fd, payload, 0) end
   uv.fs_close(fd)
 end
 
@@ -1024,7 +1085,7 @@ autocmd("FocusLost", {
 
 -- === Periodic Cache GC (static timer, no reallocation) ===
 gc_timer:start(300000, 300000, function()
-  schedule(run_gc)
+  if not _shutting_down then schedule(run_gc) end
 end)
 
 -- === CursorMoved Debounce ===
