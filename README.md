@@ -1,6 +1,6 @@
 # VimHardMode: The Ultimate Neovim Training Configuration
 
-![Vim Logo](https://raw.githubusercontent.com/neovim/neovim.github.io/master/logos/neovim-logo-300x87.png)
+<img src="https://neovim.io/logos/neovim-mark.svg" alt="Neovim Logo" width="80" />
 
 ## 🎯 Purpose
 
@@ -22,37 +22,9 @@ Welcome to VimHardMode - a Neovim configuration designed to transform you into a
 
 ### Enhanced Editing Experience
 - **Auto Whitespace Cleanup**: Removes trailing whitespace on save
-- **Smart Line Numbers**: Relative in normal mode, absolute in insert mode
-- **No Auto-commenting**: Prevents automatic comment continuation
+- **Tab-to-Space Conversion**: Converts tabs to spaces on save when `expandtab` is enabled
+- **Zen Mode**: Toggle a distraction-free editing view with `<Space><Space>`
 - **Disabled Diagnostics**: Focus on coding without distractions
-
-## ⚙️ Configuration Structure
-
-```
-lua/config/
-├── autocmds.lua    # Automatic commands and behaviors
-├── keymaps.lua     # Key mapping configurations
-├── options.lua     # General Neovim options
-└── plugins/
-    └── plugins.lua # Plugin-specific settings
-```
-
-## 🛠️ Installation
-
-1. Back up your existing Neovim configuration:
-```bash
-mv ~/.config/nvim ~/.config/nvim.backup
-```
-
-2. Clone this repository:
-```bash
-git clone https://github.com/yourusername/vim-hardmode.git ~/.config/nvim
-```
-
-3. Start Neovim and let it install dependencies:
-```bash
-nvim
-```
 
 ## 💡 Philosophy
 
@@ -85,10 +57,26 @@ This configuration intentionally disables many familiar features. It's designed 
 
 Feel free to submit pull requests or suggest improvements! Let's make the path to Vim mastery even better together.
 
-## ⚡ Want Speed Without the Bloat?
+## 💤 LazyVim
 
-If you're a developer who values **performance, minimalism, and full control**, check out the [`nvim_lite`](https://github.com/HorikitaSuzuneTsundere/Hori-VimConfig/tree/main/nvim_lite) directory.
+The author also uses [LazyVim](https://www.lazyvim.org/), a full-featured Neovim configuration framework.
 
-It's a stripped-down, blazing-fast variant of this config — zero fluff, just the essentials. Perfect as a clean foundation to build your own high-performance Neovim workflow without the noise.
+### 📋 Requirements
 
-No distractions. No hand-holding. Just speed.
+- Install [Git](https://git-scm.com/) and add its `bin` directory to your system `PATH` environment variable.
+- Install [Hack Nerd Font](https://www.nerdfonts.com/font-downloads) for icon support.
+- Install a C compiler for Tree-sitter parsers; on Windows, the author prefers [WinLibs UCRT](https://winlibs.com/).
+- Install Rust, then install `ripgrep`, `fd`, and `tree-sitter-cli`:
+  ```bash
+  cargo install ripgrep fd-find tree-sitter-cli
+  ```
+- Install `fzf` using [Scoop](https://scoop.sh/) or [Chocolatey](https://chocolatey.org/):
+  ```powershell
+  scoop install fzf
+  # or
+  choco install fzf
+  ```
+- Use [Alacritty](https://alacritty.org/) on Windows or [kitty](https://sw.kovidgoyal.net/kitty/) on Unix-like systems.
+
+See the [LazyVim documentation](https://www.lazyvim.org/) for added tools and installation instructions.
+
