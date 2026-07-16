@@ -66,9 +66,15 @@ The author also uses [LazyVim](https://www.lazyvim.org/), a full-featured Neovim
 - Install [Git](https://git-scm.com/) and add its `bin` directory to your system `PATH` environment variable.
 - Install [Hack Nerd Font](https://www.nerdfonts.com/font-downloads) for icon support.
 - Install a C compiler for Tree-sitter parsers; on Windows, the author prefers [WinLibs UCRT](https://winlibs.com/).
-- Install Rust, then install `ripgrep`, `fd`, and `tree-sitter-cli`:
+- Install Rust, then install `ripgrep` and `fd`:
   ```bash
-  cargo install ripgrep fd-find tree-sitter-cli
+  cargo install ripgrep fd-find
+  ```
+- Install `cargo-binstall`, use it to install `tree-sitter-cli`, then remove `cargo-binstall`:
+  ```bash
+  cargo install cargo-binstall
+  cargo binstall tree-sitter-cli
+  cargo uninstall cargo-binstall
   ```
 - Install `fzf` using [Scoop](https://scoop.sh/) or [Chocolatey](https://chocolatey.org/):
   ```powershell
@@ -79,4 +85,3 @@ The author also uses [LazyVim](https://www.lazyvim.org/), a full-featured Neovim
 - Use [Alacritty](https://alacritty.org/) on Windows or [kitty](https://sw.kovidgoyal.net/kitty/) on Unix-like systems.
 
 See the [LazyVim documentation](https://www.lazyvim.org/) for added tools and installation instructions.
-
